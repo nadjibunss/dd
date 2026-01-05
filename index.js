@@ -1671,7 +1671,7 @@ function getEnhancedCaption(stats) {
 ✅ *Total Meta Verified:* ${stats.totalMetaVerified}
 🔗 *Total dengan Sosmed:* ${stats.connectedSocials}
 
-⏰ *Powered by:   BGGR SMS @OTPBEGRSS*`;
+⏰ *Powered by: ZETA_ZTA*`;
 }
 
 
@@ -1728,7 +1728,7 @@ async function processBioCommandWithSession(ctx, numbers, userWa) {
       fs.writeFileSync(filename, output);
       await ctx.replyWithDocument({
         source: filename,
-        filename: `HASIL_CEKBIO_BGGRSMS${Date.now()}.txt`
+        filename: `HASIL_CEKBIO_ZETA_${Date.now()}.txt`
       }, {
         caption: caption,
         parse_mode: "Markdown",
@@ -1938,7 +1938,7 @@ async function sendMainMenu(ctx) {
     }
  ⚬ bot name:${config.botName || "Cek Bio Bot"}
  ⚬ uptime:${runtime}
- ⚬ owner: @vazzdg
+ ⚬ owner: @kahaja888
  ⚬ version:0.2
  ⚬ languages:English
 
