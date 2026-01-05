@@ -4047,7 +4047,7 @@ bot.command("getpairing", async (ctx) => {
       if (!userWa) {
         await ctx.reply("🔄 *Membuat session baru...*", { parse_mode: "Markdown" })
         userWa = await startWA(sessionId, userId)
-        await new Promise(resolve => setTimeout(resolve, 5000))
+        await new Promise(resolve => setTimeout(resolve, 10000))
       }
 
       const loadingMsg = await ctx.reply("⏳ *Meminta pairing code...*", { parse_mode: "Markdown" })
