@@ -783,8 +783,9 @@ async function startWA(sessionId = "default", userId = null, silentMode = false)
     connectTimeoutMs: 60000,
     defaultQueryTimeoutMs: 30000,
     keepAliveIntervalMs: 20000,
-    browser: ["Windows", "Chrome", "120.0.0.0"],
+    browser: ["Mac OS", "Chrome", "121.0.6167.140"],
     syncFullHistory: false,
+    mobile: false,
     transactionOpts: {
       maxCommitRetries: 5,
       delayBetweenTriesMs: 3000
