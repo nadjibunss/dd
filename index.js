@@ -1,4 +1,5 @@
 const { Telegraf } = require("telegraf")
+const crypto = require("crypto")
 const fs = require("fs")
 const path = require("path")
 const pino = require("pino")
@@ -66,15 +67,15 @@ let sessionData = {}; // ✅ wajib supaya deleteSessionData tidak error
 function getUserWASession(userId) {
   const userSessionId = `user_${userId}`;
   const userSession = activeSessions.get(userSessionId);
-  
+
   if (!userSession) {
     return null;
   }
-  
+
   if (!userSession.socket) {
     return null;
   }
-  
+
   return userSession.socket;
 }
 
@@ -86,7 +87,7 @@ function hasUserWASession(userId) {
 // ✅ Fungsi untuk mendapatkan speed settings untuk fitur lainnya
 function getOtherSpeedSettings(userId) {
   const speed = userOtherSpeed.get(userId) || "normal";
-  
+
   if (speed === "fast") {
     return {
       batchSize: 8,
@@ -109,12 +110,12 @@ function getOtherSpeedSettings(userId) {
 function getRuntime() {
   const now = Date.now();
   const diff = now - botStartTime;
-  
+
   const totalSeconds = Math.floor(diff / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  
+
   return `${hours}h ${minutes}m ${seconds}s`;
 }
 
@@ -131,9 +132,9 @@ async function processCallbackQueue(userId) {
   if (!callbackQueryQueue.has(userId) || callbackQueryQueue.get(userId).length === 0) {
     return;
   }
-  
+
   const task = callbackQueryQueue.get(userId).shift();
-  
+
   try {
     await task();
   } catch (error) {
@@ -260,7 +261,7 @@ function saveUsersDb() {
 // ✅ FUNGSI AUTO BACKUP USERS.JSON KE OWNER
 async function triggerBackup(type, userId) {
   needBackup = true;
-  
+
   // Log perubahan berdasarkan tipe
   if (type === 'new_user' && userId) {
     if (!changesLog.newUsers.includes(userId)) {
@@ -279,10 +280,10 @@ async function triggerBackup(type, userId) {
       changesLog.removedPremiums.push(userId);
     }
   }
-  
+
   const now = Date.now();
   const timeSinceLastBackup = now - lastBackupTime;
-  
+
   // Jika sudah lewat cooldown, backup langsung
   if (timeSinceLastBackup >= BACKUP_COOLDOWN) {
     await doBackup();
@@ -294,7 +295,7 @@ async function triggerBackup(type, userId) {
         await doBackup();
         backupTimeout = null;
       }, remainingTime);
-      
+
       console.log(`⏰ Backup dijadwalkan dalam ${Math.ceil(remainingTime / 1000)} detik`);
     }
   }
@@ -302,23 +303,23 @@ async function triggerBackup(type, userId) {
 
 async function doBackup() {
   if (!needBackup) return;
-  
+
   try {
     needBackup = false;
     lastBackupTime = Date.now();
-    
+
     // Buat caption detail
     let caption = "📊 *AUTO BACKUP - Users.json*\n\n";
-    
+
     // Detail perubahan
-    const totalChanges = changesLog.newUsers.length + 
-                        changesLog.newPremiums.length + 
-                        changesLog.expiredPremiums.length + 
-                        changesLog.removedPremiums.length;
-    
+    const totalChanges = changesLog.newUsers.length +
+      changesLog.newPremiums.length +
+      changesLog.expiredPremiums.length +
+      changesLog.removedPremiums.length;
+
     if (totalChanges > 0) {
       caption += "🔔 *Perubahan terdeteksi:*\n";
-      
+
       if (changesLog.newUsers.length > 0) {
         caption += `• ${changesLog.newUsers.length} User baru\n`;
       }
@@ -333,46 +334,46 @@ async function doBackup() {
       }
       caption += "\n";
     }
-    
+
     // Statistik total
     const totalUsers = allUsers.size;
     let totalPremium = 0;
     const now = Date.now();
-    
+
     for (const userId of allUsers) {
       const u = usersDb[userId];
       if (u && u.premiumUntil && u.premiumUntil > now) {
         totalPremium++;
       }
     }
-    
+
     const totalFree = totalUsers - totalPremium;
-    
+
     caption += "📊 *STATISTIK:*\n";
     caption += `👥 Total User: ${totalUsers}\n`;
     caption += `💎 Total Premium: ${totalPremium}\n`;
     caption += `🆓 Total Free: ${totalFree}\n\n`;
-    
+
     // Timestamp
     caption += `⏰ Backup: ${formatDateID(Date.now())}\n`;
-    
+
     // Ukuran file
     const stats = fs.statSync(usersFile);
     const fileSizeKB = (stats.size / 1024).toFixed(2);
     caption += `💾 File: users.json (${fileSizeKB} KB)`;
-    
+
     // Kirim file ke owner
     await bot.telegram.sendDocument(
       config.ownerId,
       { source: usersFile, filename: `users_backup_${Date.now()}.json` },
-      { 
+      {
         caption: caption,
         parse_mode: "Markdown"
       }
     );
-    
+
     console.log("✅ Backup berhasil dikirim ke owner!");
-    
+
     // Reset changes log
     changesLog = {
       newUsers: [],
@@ -380,7 +381,7 @@ async function doBackup() {
       expiredPremiums: [],
       removedPremiums: []
     };
-    
+
   } catch (error) {
     console.error("❌ Error saat backup:", error);
     // Jika gagal, reset flag agar bisa retry
@@ -406,7 +407,7 @@ function setFreeBio2Limit(limit) {
 function touchUser(userId) {
   const k = String(userId);
   let isNewUser = false;
-  
+
   if (!usersDb[k]) {
     usersDb[k] = { premiumUntil: 0, firstSeen: Date.now(), lastSeen: Date.now() };
     isNewUser = true;
@@ -414,12 +415,12 @@ function touchUser(userId) {
   usersDb[k].lastSeen = Date.now();
   allUsers.add(k);
   saveUsersDb();
-  
+
   // ✅ Trigger backup jika user baru
   if (isNewUser) {
     triggerBackup('new_user', k);
   }
-  
+
   return usersDb[k];
 }
 
@@ -432,10 +433,10 @@ function isPremium(userId) {
   if (now >= u.premiumUntil) {
     u.premiumUntil = 0; // auto reset saat user pakai bot
     saveUsersDb();
-    
+
     // ✅ Trigger backup jika premium expired
     triggerBackup('expired_premium', String(userId));
-    
+
     return false;
   }
   return true;
@@ -517,7 +518,7 @@ bot.command("addpremium", async (ctx) => {
 
   u.premiumUntil = base + addMs;
   saveUsersDb();
-  
+
   // ✅ Trigger backup untuk premium baru
   triggerBackup('new_premium', targetId);
 
@@ -545,11 +546,11 @@ bot.command("delpremium", async (ctx) => {
   if (!/^\d+$/.test(targetId)) return ctx.reply("❌ User ID harus angka.");
 
   const u = usersDb[targetId];
-  
+
   if (!u) {
     return ctx.reply("❌ User tidak ditemukan di database.");
   }
-  
+
   if (!u.premiumUntil || u.premiumUntil <= 0) {
     return ctx.reply("❌ User ini bukan premium.");
   }
@@ -557,7 +558,7 @@ bot.command("delpremium", async (ctx) => {
   // Hapus premium
   u.premiumUntil = 0;
   saveUsersDb();
-  
+
   // ✅ Trigger backup untuk premium dihapus
   triggerBackup('removed_premium', targetId);
 
@@ -575,8 +576,8 @@ function saveUsers() {
   saveUsersDb();
 }
 
-function saveSessions() { 
-  fs.writeFileSync(sessionsFile, JSON.stringify(sessionData, null, 2)) 
+function saveSessions() {
+  fs.writeFileSync(sessionsFile, JSON.stringify(sessionData, null, 2))
 }
 
 function saveVerifiedUsers() {
@@ -584,28 +585,28 @@ function saveVerifiedUsers() {
 }
 
 async function checkUserInGroup(userId) {
-    try {
-        const member = await bot.telegram.getChatMember(config.groupChatId, userId);
-        const isMember = member.status !== "left" && member.status !== "kicked";
-        
-        if (isMember) {
-            if (!verifiedUsers.has(userId)) {
-                verifiedUsers.add(userId);
-                saveVerifiedUsers();
-            }
-        } else {
-            if (verifiedUsers.has(userId)) {
-                verifiedUsers.delete(userId);
-                saveVerifiedUsers();
-            }
-        }
-        
-        return isMember;
-    } catch (error) {
-        console.error("Error checking group membership:", error);
-        // Jika error, cek dari verifiedUsers cache
-        return verifiedUsers.has(userId);
+  try {
+    const member = await bot.telegram.getChatMember(config.groupChatId, userId);
+    const isMember = member.status !== "left" && member.status !== "kicked";
+
+    if (isMember) {
+      if (!verifiedUsers.has(userId)) {
+        verifiedUsers.add(userId);
+        saveVerifiedUsers();
+      }
+    } else {
+      if (verifiedUsers.has(userId)) {
+        verifiedUsers.delete(userId);
+        saveVerifiedUsers();
+      }
     }
+
+    return isMember;
+  } catch (error) {
+    console.error("Error checking group membership:", error);
+    // Jika error, cek dari verifiedUsers cache
+    return verifiedUsers.has(userId);
+  }
 }
 
 async function isVerified(userId) {
@@ -664,35 +665,35 @@ bot.command("setfreelimit", async (ctx) => {
 
 
 async function requireVerification(ctx, next) {
-    const userId = ctx.from.id;
-    
-    if (!(await isVerified(userId))) {
-        await sendVerificationMessage(ctx);
-        return;
-    }
-    
-    return next();
+  const userId = ctx.from.id;
+
+  if (!(await isVerified(userId))) {
+    await sendVerificationMessage(ctx);
+    return;
+  }
+
+  return next();
 }
 
 function checkUserWAConnection(userId) {
   const userSessionId = `user_${userId}`;
   const userSession = activeSessions.get(userSessionId);
-  
+
   if (!userSession) {
     return false;
   }
-  
+
   if (!userSession.socket.user) {
     return false;
   }
-  
+
   return true;
 }
 
 // Fungsi untuk mendapatkan session aktif berdasarkan nomor telepon (untuk owner)
 function getActiveSessionByPhone(phone) {
   const cleanPhone = phone.replace(/[^0-9]/g, '');
-  
+
   // Cari session yang terhubung dengan nomor ini
   for (const [sessionId, session] of activeSessions) {
     if (session.socket.user && session.socket.user.id) {
@@ -702,14 +703,14 @@ function getActiveSessionByPhone(phone) {
       }
     }
   }
-  
+
   return null;
 }
 
 // Fungsi untuk mendapatkan daftar session aktif dengan nomor telepon
 function getActiveSessionsList() {
   const sessions = [];
-  
+
   for (const [sessionId, session] of activeSessions) {
     if (session.socket.user && session.socket.user.id) {
       const phone = session.socket.user.id.replace(/:\d+@s\.whatsapp\.net$/, '');
@@ -722,13 +723,13 @@ function getActiveSessionsList() {
       });
     }
   }
-  
+
   return sessions;
 }
 
 async function restoreUserSessions() {
   const sessionEntries = Object.entries(sessionData);
-  
+
   for (const [phone, data] of sessionEntries) {
     if (data.sessionId && data.userId && data.sessionId.startsWith('user_')) {
       try {
@@ -736,12 +737,12 @@ async function restoreUserSessions() {
         if (!fs.existsSync(sessionDir)) {
           continue;
         }
-        
+
         const sessionFiles = fs.readdirSync(sessionDir);
         if (sessionFiles.length === 0) {
           continue;
         }
-        
+
         if (data.userId == config.ownerId) {
           await startWA(data.sessionId, data.userId, true);
         } else {
@@ -750,7 +751,7 @@ async function restoreUserSessions() {
             await startWA(data.sessionId, data.userId, true);
           }
         }
-        
+
         await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (error) {
         console.error("Error restoring session:", error);
@@ -761,7 +762,7 @@ async function restoreUserSessions() {
 
 async function startWA(sessionId = "default", userId = null, silentMode = false) {
   const sessionDir = `./sessions/${sessionId}`
-  
+
   if (!fs.existsSync(sessionDir)) {
     fs.mkdirSync(sessionDir, { recursive: true });
   }
@@ -795,14 +796,14 @@ async function startWA(sessionId = "default", userId = null, silentMode = false)
 
   sock.ev.on("connection.update", (update) => {
     const { connection, lastDisconnect, qr } = update
-    
+
     if (connection === "open") {
       activeSessions.set(sessionId, {
         socket: sock,
         connectedAt: Date.now(),
         userId: userId
       })
-      
+
       if (userId) {
         const phone = sock.authState.creds.me?.id?.replace(/:\d+@s\.whatsapp\.net$/, '') || 'unknown';
         sessionUsers.set(phone, userId);
@@ -817,13 +818,13 @@ async function startWA(sessionId = "default", userId = null, silentMode = false)
       }
     } else if (connection === "close") {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
-      
+
       if (statusCode === DisconnectReason.loggedOut) {
         deleteSessionData(sessionId);
       }
-      
+
       activeSessions.delete(sessionId)
-      
+
       const shouldRestart = statusCode !== DisconnectReason.loggedOut
       if (shouldRestart && userId) {
         setTimeout(() => startWA(sessionId, userId, silentMode), 10000)
@@ -855,7 +856,7 @@ function deleteSessionData(sessionId) {
 
   if (phoneToDelete) {
     delete sessionData[phoneToDelete];
-    try { sessionUsers.delete(phoneToDelete); } catch (_) {}
+    try { sessionUsers.delete(phoneToDelete); } catch (_) { }
     try { saveSessions(); } catch (e) { console.error("saveSessions error:", e); }
   }
 
@@ -899,7 +900,7 @@ async function deleteUserSession(userId) {
 
         try {
           if (activeSessions?.delete) activeSessions.delete(sessionId);
-        } catch (_) {}
+        } catch (_) { }
 
         deleted = true;
         break;
@@ -912,7 +913,7 @@ async function deleteUserSession(userId) {
     for (const [phone, data] of Object.entries(sessionData)) {
       if (String(data?.userId) === userIdStr && String(data?.sessionId) === userSessionId) {
         delete sessionData[phone];
-        try { sessionUsers?.delete?.(phone); } catch (_) {}
+        try { sessionUsers?.delete?.(phone); } catch (_) { }
         deleted = true;
       }
     }
@@ -923,7 +924,7 @@ async function deleteUserSession(userId) {
     for (const [phone, data] of sessionData) {
       if (String(data?.userId) === userIdStr && String(data?.sessionId) === userSessionId) {
         sessionData.delete(phone);
-        try { sessionUsers?.delete?.(phone); } catch (_) {}
+        try { sessionUsers?.delete?.(phone); } catch (_) { }
         deleted = true;
       }
     }
@@ -948,11 +949,11 @@ function cleanupOldSessions() {
   Object.entries(sessionData).forEach(([phone, data]) => {
     const session = activeSessions.get(data.sessionId)
     if (!session && (now - data.pairedAt) > fiveHours) {
-      sessionsToDelete.push({phone, sessionId: data.sessionId})
+      sessionsToDelete.push({ phone, sessionId: data.sessionId })
     }
   })
 
-  sessionsToDelete.forEach(({phone, sessionId}) => {
+  sessionsToDelete.forEach(({ phone, sessionId }) => {
     deleteSessionData(sessionId);
   })
 }
@@ -962,18 +963,18 @@ setInterval(cleanupOldSessions, 60 * 60 * 1000)
 // Fungsi untuk mengekstrak nomor dari teks
 function extractNumbersFromText(text) {
   const numbers = [];
-  
+
   // Regex untuk menemukan nomor telepon
   const regex = /\d{8,15}/g;
   const extendedRegex = /(?:\+?\d{1,4}[-.\s]?)?(?:\(?\d{1,4}\)?[-.\s]?)?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}/g;
-  
+
   let matches;
-  
+
   matches = text.match(regex);
   if (matches) {
     numbers.push(...matches);
   }
-  
+
   const extendedMatches = text.match(extendedRegex);
   if (extendedMatches) {
     extendedMatches.forEach(match => {
@@ -985,7 +986,7 @@ function extractNumbersFromText(text) {
       }
     });
   }
-  
+
   const lines = text.split(/[\n,;\t]+/);
   lines.forEach(line => {
     const trimmed = line.trim();
@@ -998,9 +999,9 @@ function extractNumbersFromText(text) {
       }
     }
   });
-  
+
   const uniqueNumbers = [...new Set(numbers)];
-  
+
   return uniqueNumbers;
 }
 
@@ -1046,14 +1047,14 @@ async function checkNumbers(numbers, ctx, userWa) {
 
   const total = numbers.length
   let processed = 0
-  
+
   let progressMsg = await ctx.reply("🔍 *Memproses nomor...*", { parse_mode: "Markdown" });
 
   const isOwner = (userId == config.ownerId);
   const isFastMode = userFastMode.get(userId) || false;
-  
+
   let batchSize, batchDelay, onWhatsAppTimeout, statusTimeout, businessProfileTimeout, profilePictureTimeout;
-  
+
   if (isOwner) {
     batchSize = 25;
     batchDelay = 10;
@@ -1076,7 +1077,7 @@ async function checkNumbers(numbers, ctx, userWa) {
     businessProfileTimeout = 3000;
     profilePictureTimeout = 2000;
   }
-  
+
   const totalBatches = Math.ceil(total / batchSize);
   let currentBatch = 0;
 
@@ -1085,33 +1086,33 @@ async function checkNumbers(numbers, ctx, userWa) {
       if (!num || typeof num !== 'string') {
         return { type: 'invalid' };
       }
-      
+
       const cleanNum = num.replace(/[^0-9]/g, "").trim()
       if (!cleanNum) {
         return { type: 'invalid' };
       }
-      
+
       const jid = cleanNum + "@s.whatsapp.net"
-      
+
       let user = null;
       try {
         user = await Promise.race([
           userWa.onWhatsApp(jid),
-          new Promise((_, reject) => 
+          new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Timeout')), onWhatsAppTimeout)
           )
         ]);
       } catch (timeoutError) {
-        return { 
-          type: 'notRegistered', 
-          number: `+${cleanNum}` 
+        return {
+          type: 'notRegistered',
+          number: `+${cleanNum}`
         };
       }
-      
+
       if (!user || !Array.isArray(user) || user.length === 0 || !user[0] || !user[0].exists) {
-        return { 
-          type: 'notRegistered', 
-          number: `+${cleanNum}` 
+        return {
+          type: 'notRegistered',
+          number: `+${cleanNum}`
         };
       }
 
@@ -1120,7 +1121,7 @@ async function checkNumbers(numbers, ctx, userWa) {
       let status = null;
       let businessProfile = null;
       let profilePicture = null;
-      
+
       try {
         [status, businessProfile] = await Promise.all([
           Promise.race([
@@ -1132,7 +1133,7 @@ async function checkNumbers(numbers, ctx, userWa) {
             new Promise((resolve) => setTimeout(() => resolve(null), businessProfileTimeout))
           ])
         ]);
-        
+
         if (!isOwner || !isFastMode) {
           profilePicture = await Promise.race([
             userWa.profilePictureUrl(jid).catch(() => null),
@@ -1144,18 +1145,18 @@ async function checkNumbers(numbers, ctx, userWa) {
       }
 
       const data = Array.isArray(status) ? status[0] : status;
-      
+
       const isBusiness = user[0]?.isBusiness || false;
       const hasBusinessProfile = businessProfile && Object.keys(businessProfile).length > 0;
       const hasProfilePicture = profilePicture ? true : false;
-      
+
       if (hasProfilePicture) {
         stats.withProfilePicture++;
       }
-      
+
       let isVerified = false;
       let verifiedName = null;
-      
+
       if (data?.verified === true) {
         isVerified = true;
       }
@@ -1167,7 +1168,7 @@ async function checkNumbers(numbers, ctx, userWa) {
         isVerified = true;
         verifiedName = user[0].verifiedName;
       }
-      
+
       const bio = data?.status?.status || null;
       const updateTime = data?.status?.setAt ? new Date(data.status.setAt) : null;
 
@@ -1184,7 +1185,7 @@ async function checkNumbers(numbers, ctx, userWa) {
 
       let accountType = "👤 Personal";
       let accountDetails = [];
-      
+
       if (businessProfile) {
         // Extract email
         if (businessProfile.email) {
@@ -1218,10 +1219,10 @@ async function checkNumbers(numbers, ctx, userWa) {
           accountDetails.push(`🏷️ Category: ${businessProfile.category}`);
         }
       }
-      
+
       if (isBusiness || hasBusinessProfile) {
         stats.business++;
-        
+
         if (isVerified) {
           accountType = "✅ Meta Terverifikasi (Business)";
           stats.verified++;
@@ -1236,20 +1237,20 @@ async function checkNumbers(numbers, ctx, userWa) {
         stats.verifiedMeta++;
         stats.totalMetaVerified++;
         accountType = "✅ Meta Terverifikasi";
-        
+
         if (verifiedName) {
           accountDetails.push(`🏷️ ${verifiedName}`);
         }
       }
-      
+
       // 🆕 ENHANCED SOCIAL MEDIA DETECTION
       const connectedSocials = [];
       let hasBasicMeta = false;
-      
+
       if (businessProfile) {
         const description = (businessProfile.description || '').toLowerCase();
         const websites = businessProfile.website || [];
-        
+
         // Facebook detection (lebih akurat)
         const facebookPatterns = [
           /facebook\.com\/([a-zA-Z0-9._-]+)/i,
@@ -1258,7 +1259,7 @@ async function checkNumbers(numbers, ctx, userWa) {
           /@([a-zA-Z0-9._-]+)\s*facebook/i,
           /facebook\s*:\s*([a-zA-Z0-9._-]+)/i
         ];
-        
+
         let fbUsername = null;
         for (const pattern of facebookPatterns) {
           const descMatch = description.match(pattern);
@@ -1266,7 +1267,7 @@ async function checkNumbers(numbers, ctx, userWa) {
             fbUsername = descMatch[1];
             break;
           }
-          
+
           for (const website of websites) {
             const webMatch = website.match(pattern);
             if (webMatch) {
@@ -1276,14 +1277,14 @@ async function checkNumbers(numbers, ctx, userWa) {
           }
           if (fbUsername) break;
         }
-        
+
         if (fbUsername || description.includes('facebook') || description.includes('fb page')) {
           businessDetails.facebook = fbUsername || 'Yes (link not found)';
           connectedSocials.push(`Facebook${fbUsername ? `: ${fbUsername}` : ''}`);
           hasBasicMeta = true;
           stats.totalWithFacebook++;
         }
-        
+
         // Instagram detection (lebih akurat)
         const instagramPatterns = [
           /instagram\.com\/([a-zA-Z0-9._]+)/i,
@@ -1292,7 +1293,7 @@ async function checkNumbers(numbers, ctx, userWa) {
           /ig\s*:\s*@?([a-zA-Z0-9._]+)/i,
           /instagram\s*:\s*@?([a-zA-Z0-9._]+)/i
         ];
-        
+
         let igUsername = null;
         for (const pattern of instagramPatterns) {
           const descMatch = description.match(pattern);
@@ -1300,7 +1301,7 @@ async function checkNumbers(numbers, ctx, userWa) {
             igUsername = descMatch[1];
             break;
           }
-          
+
           for (const website of websites) {
             const webMatch = website.match(pattern);
             if (webMatch) {
@@ -1310,19 +1311,19 @@ async function checkNumbers(numbers, ctx, userWa) {
           }
           if (igUsername) break;
         }
-        
+
         if (igUsername || description.includes('instagram') || description.includes('ig ')) {
           businessDetails.instagram = igUsername || 'Yes (username not found)';
           connectedSocials.push(`Instagram${igUsername ? `: @${igUsername}` : ''}`);
           hasBasicMeta = true;
           stats.totalWithInstagram++;
         }
-        
+
         if (hasBasicMeta && !isVerified && !isBusiness) {
           stats.basicMeta++;
           accountType = "🔗 Basic Meta";
         }
-        
+
         if (connectedSocials.length > 0) {
           accountDetails.push(`🔗 Terhubung: ${connectedSocials.join(', ')}`);
           stats.connectedSocials++;
@@ -1336,7 +1337,7 @@ async function checkNumbers(numbers, ctx, userWa) {
       }
 
       let registrationPercent = 75;
-      
+
       if (isBusiness) registrationPercent += 10;
       if (isVerified) registrationPercent += 8;
       if (hasBasicMeta) registrationPercent += 5;
@@ -1345,7 +1346,7 @@ async function checkNumbers(numbers, ctx, userWa) {
       if (updateTime && (Date.now() - updateTime.getTime()) < 30 * 24 * 60 * 60 * 1000) {
         registrationPercent += 3;
       }
-      
+
       registrationPercent = Math.min(registrationPercent, 98);
       registrationPercent = Math.max(registrationPercent, 70);
 
@@ -1386,15 +1387,15 @@ async function checkNumbers(numbers, ctx, userWa) {
           }
         };
       }
-      
+
     } catch (err) {
       console.error("Error processing number:", err);
       try {
         const cleanNum = num.replace(/[^0-9]/g, "").trim();
         if (cleanNum) {
-          return { 
-            type: 'notRegistered', 
-            number: `+${cleanNum}` 
+          return {
+            type: 'notRegistered',
+            number: `+${cleanNum}`
           };
         }
       } catch (e) {
@@ -1408,12 +1409,12 @@ async function checkNumbers(numbers, ctx, userWa) {
     const batchStart = batchIndex * batchSize;
     const batchEnd = Math.min(batchStart + batchSize, total);
     const batchNumbers = numbers.slice(batchStart, batchEnd);
-    
+
     currentBatch++;
-    
+
     const batchPromises = batchNumbers.map(num => processSingleNumber(num));
     const batchResults = await Promise.allSettled(batchPromises);
-    
+
     batchResults.forEach((result, index) => {
       if (result.status === 'fulfilled') {
         const numberResult = result.value;
@@ -1431,26 +1432,26 @@ async function checkNumbers(numbers, ctx, userWa) {
         }
       }
     });
-    
+
     processed += batchNumbers.length;
-    
+
     const percent = Math.round((processed / total) * 100);
     const bar = "█".repeat(Math.floor(percent / 10)) + "░".repeat(10 - Math.floor(percent / 10));
-    
+
     const modeInfo = isOwner ? '🚀 OWNER' : (isFastMode ? '⚡ FAST' : '🐢 NORMAL');
-    
+
     try {
       await ctx.telegram.editMessageText(
-        ctx.chat.id, 
-        progressMsg.message_id, 
-        null, 
+        ctx.chat.id,
+        progressMsg.message_id,
+        null,
         `🔍 *Progress:* ${bar} ${percent}%\n*Memproses ${processed}/${total} nomor...*\n*Batch ${currentBatch}/${totalBatches}*\n*Mode:* ${modeInfo}`,
         { parse_mode: "Markdown" }
       );
     } catch (error) {
       console.error("Error updating progress:", error);
     }
-    
+
     if (batchIndex < totalBatches - 1) {
       await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
@@ -1464,7 +1465,7 @@ async function checkNumbers(numbers, ctx, userWa) {
 
   // 🆕 ENHANCED OUTPUT FORMAT
   let output = [];
-  
+
   output.push("╔═══════════════════════════════════╗");
   output.push("║   HASIL CEK BIO WHATSAPP          ║");
   output.push("╚═══════════════════════════════════╝");
@@ -1517,7 +1518,7 @@ async function checkNumbers(numbers, ctx, userWa) {
           output.push(`   └─ ${item.bio || 'Tidak ada bio'}`);
           output.push(`      └─ ⏰ ${item.updateTime ? item.updateTime.toLocaleDateString('id-ID') + '.' + item.updateTime.getHours().toString().padStart(2, '0') + item.updateTime.getMinutes().toString().padStart(2, '0') : 'Tidak diketahui'}`);
           output.push(`        └─ ${item.accountType || 'Personal'}`);
-          
+
           // 🆕 TAMPILKAN BUSINESS DETAILS
           if (item.businessDetails) {
             if (item.businessDetails.email) {
@@ -1539,7 +1540,7 @@ async function checkNumbers(numbers, ctx, userWa) {
               output.push(`          └─ 📍 Address: ${item.businessDetails.address}`);
             }
           }
-          
+
           if (item.accountDetails && item.accountDetails.length > 0) {
             item.accountDetails.forEach(detail => {
               output.push(`          └─ ${detail}`);
@@ -1562,7 +1563,7 @@ async function checkNumbers(numbers, ctx, userWa) {
       if (item && item.number) {
         output.push(`└─ ${item.number}`);
         output.push(`   └─ ${item.accountType || 'Personal'}`);
-        
+
         // 🆕 TAMPILKAN BUSINESS DETAILS (untuk nomor tanpa bio juga)
         if (item.businessDetails) {
           if (item.businessDetails.email) {
@@ -1578,7 +1579,7 @@ async function checkNumbers(numbers, ctx, userWa) {
             output.push(`     └─ 🌐 Website: ${item.businessDetails.website.join(', ')}`);
           }
         }
-        
+
         if (item.accountDetails && item.accountDetails.length > 0) {
           item.accountDetails.forEach(detail => {
             output.push(`     └─ ${detail}`);
@@ -1601,7 +1602,7 @@ async function checkNumbers(numbers, ctx, userWa) {
 
     const maxNotRegisteredDisplay = 100;
     const displayNotRegistered = results.notRegistered.slice(0, maxNotRegisteredDisplay);
-    
+
     displayNotRegistered.forEach(number => {
       if (number) {
         output.push(`└─ ${number}`);
@@ -1628,9 +1629,9 @@ async function checkNumbers(numbers, ctx, userWa) {
     minute: '2-digit',
     second: '2-digit'
   });
-  
+
   output.push(`🕒 ${formattedDate}, ${formattedTime}`);
-  
+
   return {
     text: output.join("\n"),
     stats: {
@@ -1676,7 +1677,7 @@ function getEnhancedCaption(stats) {
 
 async function processBioCommandWithSession(ctx, numbers, userWa) {
   const userId = ctx.from.id;
-  
+
   if (!userWa) {
     await ctx.reply("❌ *Session tidak aktif.*", { parse_mode: "Markdown" });
     return;
@@ -1687,7 +1688,7 @@ async function processBioCommandWithSession(ctx, numbers, userWa) {
     return;
   }
 
-  const validNumbers = numbers.filter(num => 
+  const validNumbers = numbers.filter(num =>
     num && typeof num === 'string' && num.replace(/[^0-9]/g, "").trim().length >= 8
   );
 
@@ -1709,12 +1710,12 @@ async function processBioCommandWithSession(ctx, numbers, userWa) {
 
   try {
     const { text: output, stats } = await checkNumbers(numbers, ctx, userWa);
-    
+
     const randomId = Math.random().toString(36).substring(2, 15);
     const filename = `hasil_bio_${randomId}.txt`;
-    
+
     const caption =
-`RESULT INFORMATION
+      `RESULT INFORMATION
 ⚬ with bio  : ${stats.withBio}
 ⚬ without bio : ${stats.noBio}
 ⚬ not registered  : ${stats.notRegistered}
@@ -1722,12 +1723,12 @@ async function processBioCommandWithSession(ctx, numbers, userWa) {
 ⚬ meta verified : ${stats.totalMetaVerified}
 ⚬ with social media : ${stats.connectedSocials}
 ╰─➤ presented by ZETA`;
-    
+
     if (output && output.length > 0) {
       fs.writeFileSync(filename, output);
-      await ctx.replyWithDocument({ 
-        source: filename, 
-        filename: `HASIL_CEKBIO_BGGRSMS${Date.now()}.txt` 
+      await ctx.replyWithDocument({
+        source: filename,
+        filename: `HASIL_CEKBIO_BGGRSMS${Date.now()}.txt`
       }, {
         caption: caption,
         parse_mode: "Markdown",
@@ -1738,13 +1739,13 @@ async function processBioCommandWithSession(ctx, numbers, userWa) {
           ]
         }
       });
-      
+
       try {
         await ctx.telegram.deleteMessage(ctx.chat.id, processingMsg.message_id);
       } catch (e) {
         console.error("Error deleting processing message:", e);
       }
-      
+
       setTimeout(() => {
         try {
           if (fs.existsSync(filename)) {
@@ -1757,10 +1758,10 @@ async function processBioCommandWithSession(ctx, numbers, userWa) {
     } else {
       await ctx.reply("❌ *Tidak ada data yang dapat ditampilkan*", { parse_mode: "Markdown" });
     }
-    
+
   } catch (error) {
     await ctx.reply(`❌ *Error:* ${error.message}`, { parse_mode: "Markdown" });
-    
+
     try {
       await ctx.telegram.deleteMessage(ctx.chat.id, processingMsg.message_id);
     } catch (e) {
@@ -1773,7 +1774,7 @@ async function processBioCommand(ctx, numbers) {
   const userId = ctx.from.id;
   const userSessionId = `user_${userId}`;
   const userSession = activeSessions.get(userSessionId);
-  
+
   if (!userSession) {
     await ctx.reply("❌ *Anda belum melakukan pairing!*\n\nGunakan /getpairing terlebih dahulu.", { parse_mode: "Markdown" });
     return;
@@ -1790,29 +1791,29 @@ async function processBioCommand(ctx, numbers) {
 // Fungsi khusus untuk owner menggunakan session mana saja
 async function processBioCommandOwner(ctx, args) {
   const userId = ctx.from.id;
-  
+
   // Cek apakah owner
   if (userId != config.ownerId) {
     await ctx.reply("❌ Hanya owner yang dapat menggunakan fitur ini!");
     return;
   }
-  
+
   // Format: /obio <phone> <numbers>
   // atau: /obio <phone> (dengan reply file)
   const parts = args.split(' ');
   if (parts.length < 2) {
-    await ctx.reply("❌ *Format:* `/obio <phone> <numbers>`\n*Contoh:* `/obio 628123456789 628111222333,628444555666`", { 
-      parse_mode: "Markdown" 
+    await ctx.reply("❌ *Format:* `/obio <phone> <numbers>`\n*Contoh:* `/obio 628123456789 628111222333,628444555666`", {
+      parse_mode: "Markdown"
     });
     return;
   }
-  
+
   const targetPhone = parts[0];
   const numbersText = parts.slice(1).join(' ');
-  
+
   // Cari session berdasarkan nomor telepon
   const userWa = getActiveSessionByPhone(targetPhone);
-  
+
   if (!userWa) {
     // Tampilkan daftar session aktif
     const activeSessionsList = getActiveSessionsList();
@@ -1820,33 +1821,33 @@ async function processBioCommandOwner(ctx, args) {
       await ctx.reply("❌ *Tidak ada session aktif!*", { parse_mode: "Markdown" });
       return;
     }
-    
+
     let message = "📱 *DAFTAR SESSION AKTIF:*\n\n";
     activeSessionsList.forEach((session, index) => {
       message += `${index + 1}. +${session.phone} (User: ${session.userId})\n`;
     });
-    
+
     message += "\n*Gunakan:* `/obio <phone> <numbers>`\n*Contoh:* `/obio 628123456789 628111,628222`";
-    
+
     await ctx.reply(message, { parse_mode: "Markdown" });
     return;
   }
-  
+
   // Ekstrak nomor dari teks
   const numbers = extractNumbersFromText(numbersText);
-  
+
   if (numbers.length === 0) {
     await ctx.reply("❌ *Tidak ditemukan nomor yang valid.*", { parse_mode: "Markdown" });
     return;
   }
-  
+
   await processBioCommandWithSession(ctx, numbers, userWa);
 }
 
 
 // ==================== FUNGSI BANTUAN ====================
 
- async function sendVerificationMessage(ctx) {
+async function sendVerificationMessage(ctx) {
   try {
     const message = `Halo ${ctx.from.first_name}! 👋
 
@@ -1858,14 +1859,14 @@ Untuk menggunakan bot ini, Anda perlu bergabung dengan grup kami terlebih dahulu
 3. Klik tombol "✅ Sudah Bergabung"
 
 Setelah itu, Anda bisa menggunakan semua fitur bot!`;
-    
+
     // Pastikan config.groupLink ada dan valid
     let inlineKeyboard = [];
     if (config.groupLink && typeof config.groupLink === 'string' && config.groupLink.startsWith('https://')) {
       inlineKeyboard.push([{ text: "📲 Bergabung Grup", url: config.groupLink }]);
     }
     inlineKeyboard.push([{ text: "✅ Sudah Bergabung", callback_data: "refresh_verification" }]);
-    
+
     return await ctx.reply(message, {
       parse_mode: "Markdown",
       reply_markup: {
@@ -1902,10 +1903,10 @@ async function sendMainMenu(ctx) {
   const premium = isPremium(userId); // auto-expired dicek saat user pakai bot
   const u = usersDb[String(userId)] || {};
 
-  const totalUsers = allUsers.size; 
+  const totalUsers = allUsers.size;
   const hasActiveSession = checkUserWAConnection(userId);
   const runtime = getRuntime();
-  
+
   const mainButtons = {
     inline_keyboard: [
       [
@@ -1921,7 +1922,7 @@ async function sendMainMenu(ctx) {
       ]
     ]
   };
-  
+
   const welcomeMsg = `
 \`\`\`
  Hello, ${ctx.from.first_name}! Welcome to the Cek Bio bot.
@@ -1931,11 +1932,10 @@ async function sendMainMenu(ctx) {
  ⚬ total users:${totalUsers.toString().padEnd(20)}
  ⚬ status:✅ verified
  ⚬ active sessions:${hasActiveSession ? "✅ connected" : "❌ not connected"}
- ⚬ premium:${
-   premium
-     ? `✅ active | remaining ${formatRemaining(u.premiumUntil - Date.now())} | exp ${formatDateID(u.premiumUntil)}`
-     :"❌ free"
- }
+ ⚬ premium:${premium
+      ? `✅ active | remaining ${formatRemaining(u.premiumUntil - Date.now())} | exp ${formatDateID(u.premiumUntil)}`
+      : "❌ free"
+    }
  ⚬ bot name:${config.botName || "Cek Bio Bot"}
  ⚬ uptime:${runtime}
  ⚬ owner: @vazzdg
@@ -1982,7 +1982,7 @@ async function sendMainMenuAndAudio(ctx) {
   try {
     // Kirim menu utama dulu
     await sendMainMenu(ctx);
-    
+
     // Kirim audio setelah menu utama jika audioUrl tersedia
     if (config.audioUrl) {
       try {
@@ -2011,7 +2011,7 @@ async function sendMainMenuAndAudio(ctx) {
 
 bot.start(async (ctx) => {
   const userId = ctx.from.id;
-  
+
   addToQueue(userId, async () => {
     try {
       // Tambahkan user ke database
@@ -2020,7 +2020,7 @@ bot.start(async (ctx) => {
 
       // Cek apakah user sudah terverifikasi
       const isUserVerified = await isVerified(userId);
-      
+
       if (isUserVerified) {
         // User sudah terverifikasi, kirim menu utama dan audio
         await sendMainMenuAndAudio(ctx);
@@ -2030,7 +2030,7 @@ bot.start(async (ctx) => {
       }
     } catch (error) {
       console.error("Error in /start command:", error);
-      
+
       // Fallback jika terjadi error
       await ctx.reply(
         "❌ *Terjadi kesalahan!*\n\nSilakan coba lagi atau hubungi admin.",
@@ -2044,56 +2044,56 @@ bot.start(async (ctx) => {
 
 bot.on("callback_query", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   addCallbackToQueue(userId, async () => {
     try {
       await ctx.answerCbQuery();
-      
+
       const data = ctx.callbackQuery.data;
-      
+
       // Handle refresh verification
       if (data === "refresh_verification") {
-  try {
-    // Cek apakah user sudah join group
-    const isUserVerified = await checkUserInGroup(userId);
-    
-    if (isUserVerified) {
-      // User sudah terverifikasi
-      try {
-        await ctx.deleteMessage();
-      } catch (e) {
-        console.error("Error deleting verification message:", e);
-      }
-      
-      await sendMainMenuAndAudio(ctx);
-    } else {
-      // User belum terverifikasi
-      let inlineKeyboard = [];
-      if (config.groupLink && typeof config.groupLink === 'string' && config.groupLink.startsWith('https://')) {
-        inlineKeyboard.push([{ text: "📲 Bergabung Grup", url: config.groupLink }]);
-      }
-      inlineKeyboard.push([{ text: "✅ Sudah Bergabung", callback_data: "refresh_verification" }]);
-      
-      await ctx.editMessageText(
-        `❌ *Anda belum bergabung dengan grup!*\n\nSilakan klik tombol di bawah untuk bergabung terlebih dahulu.`,
-        {
-          parse_mode: "Markdown",
-          reply_markup: {
-            inline_keyboard: inlineKeyboard
+        try {
+          // Cek apakah user sudah join group
+          const isUserVerified = await checkUserInGroup(userId);
+
+          if (isUserVerified) {
+            // User sudah terverifikasi
+            try {
+              await ctx.deleteMessage();
+            } catch (e) {
+              console.error("Error deleting verification message:", e);
+            }
+
+            await sendMainMenuAndAudio(ctx);
+          } else {
+            // User belum terverifikasi
+            let inlineKeyboard = [];
+            if (config.groupLink && typeof config.groupLink === 'string' && config.groupLink.startsWith('https://')) {
+              inlineKeyboard.push([{ text: "📲 Bergabung Grup", url: config.groupLink }]);
+            }
+            inlineKeyboard.push([{ text: "✅ Sudah Bergabung", callback_data: "refresh_verification" }]);
+
+            await ctx.editMessageText(
+              `❌ *Anda belum bergabung dengan grup!*\n\nSilakan klik tombol di bawah untuk bergabung terlebih dahulu.`,
+              {
+                parse_mode: "Markdown",
+                reply_markup: {
+                  inline_keyboard: inlineKeyboard
+                }
+              }
+            );
           }
+        } catch (error) {
+          console.error("Error in refresh_verification:", error);
+          await ctx.editMessageText(
+            "❌ *Terjadi kesalahan!*\n\nSilakan coba lagi atau hubungi admin.",
+            { parse_mode: "Markdown" }
+          );
         }
-      );
-    }
-  } catch (error) {
-    console.error("Error in refresh_verification:", error);
-    await ctx.editMessageText(
-      "❌ *Terjadi kesalahan!*\n\nSilakan coba lagi atau hubungi admin.",
-      { parse_mode: "Markdown" }
-    );
-  }
-  return;
-}
-      
+        return;
+      }
+
       // Handle back to main menu
       if (data === "back_menu") {
         try {
@@ -2101,11 +2101,11 @@ bot.on("callback_query", async (ctx) => {
         } catch (e) {
           console.error("Error deleting message:", e);
         }
-        
+
         await sendMainMenu(ctx);
         return;
       }
-      
+
       // Handle tebakan jawaban
       if (data.startsWith("jawaban_")) {
         const index = parseInt(data.split("_")[1]);
@@ -2131,7 +2131,7 @@ bot.on("callback_query", async (ctx) => {
             answer: "*Karena gak ada yang bisa sembunyi dari gravitasi!* 🔬"
           }
         ];
-        
+
         if (index >= 0 && index < tebakanList.length) {
           await ctx.editMessageText(
             `*TEBAK-TEBAKAN LUCU* 🤔\n\n${tebakanList[index].question}\n\n${tebakanList[index].answer}`,
@@ -2148,41 +2148,41 @@ bot.on("callback_query", async (ctx) => {
         }
         return;
       }
-      
+
       // Handle session refresh (owner only)
       if (data === "refresh_sessions") {
         if (ctx.from.id != config.ownerId) {
           await ctx.answerCbQuery("Hanya owner yang dapat refresh session");
           return;
         }
-        
+
         try {
           await ctx.deleteMessage();
         } catch (e) {
           console.error("Error deleting message:", e);
         }
-        
+
         await ctx.replyWithChatAction("typing");
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         // Panggil command listsesi
         await module.exports.listsesi(ctx);
         return;
       }
-      
+
       // Handle bot status
       if (data === "bot_status") {
         const totalUsers = allUsers.size;
         const activeSessionsCount = activeSessions.size;
         const runtime = getRuntime();
-        
+
         let message = `📊 *Status Bot*\n\n`;
         message += `🤖 *Nama Bot:* ${config.botName || "Cek Bio Bot"}\n`;
         message += `⏰ *Uptime:* ${runtime}\n`;
         message += `👥 *Total Pengguna:* ${totalUsers}\n`;
         message += `🔐 *Verifikasi:* ON\n`;
         message += `📱 *Session Aktif:* ${activeSessionsCount}\n`;
-        
+
         try {
           await ctx.editMessageText(message, {
             parse_mode: "Markdown",
@@ -2206,11 +2206,11 @@ bot.on("callback_query", async (ctx) => {
         }
         return;
       }
-      
+
       // Handle settings menu
       if (data === "settings_menu") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           try {
             await ctx.editMessageText("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
@@ -2223,9 +2223,9 @@ bot.on("callback_query", async (ctx) => {
           }
           return;
         }
-        
+
         const settingsMsg = `⚙️ *Settings Menu*\n\nPilih pengaturan yang diinginkan:`;
-        
+
         try {
           await ctx.editMessageText(settingsMsg, {
             parse_mode: "Markdown",
@@ -2253,11 +2253,11 @@ bot.on("callback_query", async (ctx) => {
         }
         return;
       }
-      
+
       // Handle session status
       if (data === "session_status") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           try {
             await ctx.editMessageText("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
@@ -2270,18 +2270,18 @@ bot.on("callback_query", async (ctx) => {
           }
           return;
         }
-        
+
         const userSessionId = `user_${userId}`;
         const session = activeSessions.get(userSessionId);
         let sessionMsg = "";
-        
+
         if (session) {
           const phone = session.socket.user?.id?.replace(/:\d+@s\.whatsapp\.net$/, '') || 'unknown';
           sessionMsg = `📱 *Status Session*\n\n✅ *Status:* Terhubung\n📞 *Nomor:* +${phone}\n⏰ *Terhubung sejak:* ${new Date(session.connectedAt).toLocaleString('id-ID')}`;
         } else {
           sessionMsg = `📱 *Status Session*\n\n❌ *Status:* Tidak terhubung\n\nSilakan lakukan pairing terlebih dahulu.`;
         }
-        
+
         try {
           await ctx.editMessageText(sessionMsg, {
             parse_mode: "Markdown",
@@ -2307,11 +2307,11 @@ bot.on("callback_query", async (ctx) => {
         }
         return;
       }
-      
+
       // Handle fast mode toggle
       if (data === "fast_mode") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           try {
             await ctx.editMessageText("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
@@ -2324,11 +2324,11 @@ bot.on("callback_query", async (ctx) => {
           }
           return;
         }
-        
+
         const isFastMode = userFastMode.get(userId) || false;
-        
+
         const fastModeMsg = `⚡ *Fast Mode*\n\nMode cepat untuk pemrosesan nomor.\n*Status:* ${isFastMode ? '✅ Aktif' : '❌ Nonaktif'}\n\nNote: Mode cepat dapat menyebabkan timeout jika terlalu banyak permintaan.`;
-        
+
         try {
           await ctx.editMessageText(fastModeMsg, {
             parse_mode: "Markdown",
@@ -2358,7 +2358,7 @@ bot.on("callback_query", async (ctx) => {
         }
         return;
       }
-      
+
       // Handle enable fast mode
       if (data === "enable_fast") {
         userFastMode.set(userId, true);
@@ -2383,7 +2383,7 @@ bot.on("callback_query", async (ctx) => {
         }
         return;
       }
-      
+
       // Handle disable fast mode
       if (data === "disable_fast") {
         userFastMode.set(userId, false);
@@ -2408,12 +2408,12 @@ bot.on("callback_query", async (ctx) => {
         }
         return;
       }
-      
+
       // ==================== KECEPATAN LAINNYA ====================
       // Handle other speed menu
       if (data === "other_speed") {
         const currentSpeed = userOtherSpeed.get(userId) || "normal";
-        
+
         let speedStatus = "";
         if (currentSpeed === "normal") {
           speedStatus = "🐢 Normal (5 batch, 2500ms delay)";
@@ -2422,7 +2422,7 @@ bot.on("callback_query", async (ctx) => {
         } else if (currentSpeed === "ultrafast") {
           speedStatus = "🚀 Ultra Fast (8 batch, 1000ms delay)";
         }
-        
+
         const speedMsg = `🚀 *Kecepatan Lainnya*\n\n` +
           `Status saat ini: ${speedStatus}\n\n` +
           `Pengaturan ini berlaku untuk:\n` +
@@ -2431,7 +2431,7 @@ bot.on("callback_query", async (ctx) => {
           `• Autoresetlink\n` +
           `• Autosampul\n\n` +
           `Pilih kecepatan:`;
-        
+
         try {
           await ctx.editMessageText(speedMsg, {
             parse_mode: "Markdown",
@@ -2459,7 +2459,7 @@ bot.on("callback_query", async (ctx) => {
         }
         return;
       }
-      
+
       // Handle speed normal
       if (data === "speed_normal") {
         userOtherSpeed.set(userId, "normal");
@@ -2484,7 +2484,7 @@ bot.on("callback_query", async (ctx) => {
         }
         return;
       }
-      
+
       // Handle speed fast
       if (data === "speed_fast") {
         userOtherSpeed.set(userId, "fast");
@@ -2509,7 +2509,7 @@ bot.on("callback_query", async (ctx) => {
         }
         return;
       }
-      
+
       // Handle speed ultrafast
       if (data === "speed_ultrafast") {
         userOtherSpeed.set(userId, "ultrafast");
@@ -2534,11 +2534,11 @@ bot.on("callback_query", async (ctx) => {
         }
         return;
       }
-      
+
       // Handle delete pairing confirmation
       if (data === "delpairing_confirm") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           try {
             await ctx.editMessageText("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
@@ -2551,7 +2551,7 @@ bot.on("callback_query", async (ctx) => {
           }
           return;
         }
-        
+
         try {
           await ctx.editMessageText("🗑 *Yakin ingin menghapus pairing?*\n\nIni akan memutuskan WhatsApp Anda dari bot.", {
             parse_mode: "Markdown",
@@ -2575,26 +2575,26 @@ bot.on("callback_query", async (ctx) => {
         }
         return;
       }
-      
+
       // Handle delete pairing execution
       if (data === "delpairing_execute") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           try {
             await ctx.editMessageText("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
-              parse_mode: "Markdown" 
+              parse_mode: "Markdown"
             });
           } catch (error) {
             await ctx.reply("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
-              parse_mode: "Markdown" 
+              parse_mode: "Markdown"
             });
           }
           return;
         }
-        
+
         const deleted = await deleteUserSession(userId);
-        
+
         if (deleted) {
           try {
             await ctx.editMessageText("✅ *Session berhasil dihapus!*\n\nPairing telah dihapus dari sistem.", {
@@ -2642,13 +2642,13 @@ bot.on("callback_query", async (ctx) => {
         }
         return;
       }
-      
+
       // Handle fun menu
-      
+
       // Handle bio menu
       if (data === "bio_menu") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           try {
             await ctx.editMessageText("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
@@ -2661,9 +2661,9 @@ bot.on("callback_query", async (ctx) => {
           }
           return;
         }
-        
+
         const hasActiveSession = checkUserWAConnection(userId);
-        
+
         if (!hasActiveSession && userId != config.ownerId) {
           try {
             await ctx.editMessageText("❌ *Anda belum melakukan pairing!*\n\nGunakan /getpairing terlebih dahulu.", {
@@ -2688,7 +2688,7 @@ bot.on("callback_query", async (ctx) => {
           }
           return;
         }
-        
+
         const bioMsg = `📋 *CEK BIO WHATSAPP*
 
 *Akurasi: 100%*
@@ -2737,16 +2737,16 @@ Pilih cara input nomor:`;
         }
         return;
       }
-      
+
       // Handle owner bio menu
       if (data === "owner_bio_menu") {
         if (ctx.from.id != config.ownerId) {
           await ctx.answerCbQuery("Hanya owner yang dapat mengakses menu ini");
           return;
         }
-        
+
         const activeSessionsList = getActiveSessionsList();
-        
+
         if (activeSessionsList.length === 0) {
           try {
             await ctx.editMessageText("❌ *Tidak ada session aktif!*", {
@@ -2769,18 +2769,18 @@ Pilih cara input nomor:`;
           }
           return;
         }
-        
+
         let message = "👑 *OWNER BIO MENU*\n\n";
         message += "*Session aktif:*\n";
-        
+
         activeSessionsList.forEach((session, index) => {
           message += `${index + 1}. +${session.phone} (User: ${session.userId})\n`;
         });
-        
+
         message += "\n*Gunakan:*\n";
         message += "`/obio <phone> <numbers>` - Cek bio dengan session tertentu\n";
         message += "`/obiofile <phone>` - Cek bio dengan file (reply .txt)";
-        
+
         try {
           await ctx.editMessageText(message, {
             parse_mode: "Markdown",
@@ -2804,14 +2804,14 @@ Pilih cara input nomor:`;
         }
         return;
       }
-      
+
       // Handle owner bio help
       if (data === "owner_bio_help") {
         if (ctx.from.id != config.ownerId) {
           await ctx.answerCbQuery("Hanya owner yang dapat mengakses menu ini");
           return;
         }
-        
+
         await ctx.editMessageText(`👑 *OWNER BIO COMMANDS*
 
 *Format 1:* (langsung dengan nomor)
@@ -2839,11 +2839,11 @@ Pilih cara input nomor:`;
         });
         return;
       }
-      
+
       // Handle WA Features menu (List Grup & Autodesc)
       if (data === "wa_features_menu") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           try {
             await ctx.editMessageText("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
@@ -2856,7 +2856,7 @@ Pilih cara input nomor:`;
           }
           return;
         }
-        
+
         const waMsg = `📲 *FITUR WA LAINNYA*
 
 📌 *Fitur Tersedia:*
@@ -2864,7 +2864,7 @@ Pilih cara input nomor:`;
 • Autodesc - Update deskripsi grup otomatis
 
 Pilih fitur yang ingin digunakan:`;
-        
+
         try {
           await ctx.editMessageText(waMsg, {
             parse_mode: "Markdown",
@@ -2908,46 +2908,46 @@ Pilih fitur yang ingin digunakan:`;
         }
         return;
       }
-      
+
       // Handle execute listgrup
       if (data === "execute_listgrup") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           await ctx.reply("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
             parse_mode: "Markdown"
           });
           return;
         }
-        
+
         // Hapus message callback query
         try {
           await ctx.deleteMessage();
-        } catch (e) {}
-        
+        } catch (e) { }
+
         // ✅ Panggil fungsi listgrupLogic yang sama dengan command
         addToQueue(userId, async () => {
           await listgrupLogic(ctx, userId);
         });
-        
+
         return;
       }
-      
+
       // Handle execute autodesc  
       if (data === "execute_autodesc") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           await ctx.reply("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
             parse_mode: "Markdown"
           });
           return;
         }
-        
+
         // ✅ Cek role owner/premium
         const isOwner = String(userId) === String(config.ownerId);
         const premium = isPremium(userId);
-        
+
         if (!isOwner && !premium) {
           await ctx.answerCbQuery("❌ Fitur ini hanya untuk Owner dan Premium User!", { show_alert: true });
           await ctx.reply(
@@ -2957,10 +2957,10 @@ Pilih fitur yang ingin digunakan:`;
           );
           return;
         }
-        
+
         // ✅ Set state: user sedang menunggu input
         waitingForAutodescInput.set(userId, true);
-        
+
         await ctx.answerCbQuery();
         await ctx.reply(
           "✏️ *AUTODESC - Mode Input Aktif*\n\n" +
@@ -2968,7 +2968,7 @@ Pilih fitur yang ingin digunakan:`;
           "*Contoh:*\n" +
           "Selamat datang! Welcome my grup\n\n" +
           "💡 Kirim teks biasa (bukan command), bot akan otomatis proses!",
-          { 
+          {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
@@ -2979,14 +2979,14 @@ Pilih fitur yang ingin digunakan:`;
         );
         return;
       }
-      
+
       // ✅ Handle cancel autodesc
       if (data === "cancel_autodesc") {
         waitingForAutodescInput.delete(userId);
         await ctx.answerCbQuery("❌ Dibatalkan");
         await ctx.editMessageText(
           "❌ *Autodesc dibatalkan.*",
-          { 
+          {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
@@ -2997,46 +2997,46 @@ Pilih fitur yang ingin digunakan:`;
         );
         return;
       }
-      
+
       // ✅ HANDLER EXECUTE AUTORESETLINK (langsung proses)
       if (data === "execute_autoresetlink") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           await ctx.reply("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
             parse_mode: "Markdown"
           });
           return;
         }
-        
+
         // Hapus message callback query
         try {
           await ctx.deleteMessage();
-        } catch (e) {}
-        
+        } catch (e) { }
+
         // ✅ Langsung proses autoresetlink
         addToQueue(userId, async () => {
           await autoresetlinkLogic(ctx, userId);
         });
-        
+
         return;
       }
-      
+
       // ✅ HANDLER EXECUTE AUTOSAMPUL (minta foto)
       if (data === "execute_autosampul") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           await ctx.reply("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
             parse_mode: "Markdown"
           });
           return;
         }
-        
+
         // ✅ CEK ROLE: HANYA OWNER DAN PREMIUM
         const isOwner = String(userId) === String(config.ownerId);
         const premium = isPremium(userId);
-        
+
         if (!isOwner && !premium) {
           await ctx.answerCbQuery("❌ Fitur ini hanya untuk Owner dan Premium User!", { show_alert: true });
           await ctx.reply(
@@ -3046,17 +3046,17 @@ Pilih fitur yang ingin digunakan:`;
           );
           return;
         }
-        
+
         // ✅ SET WAITING STATE & MINTA FOTO
         waitingForAutosampulPhoto.set(userId, true);
-        
+
         await ctx.answerCbQuery();
         await ctx.reply(
           "🖼️ *AUTO SAMPUL - Mode Input Aktif*\n\n" +
           "📸 *Kirim foto* yang ingin dijadikan sampul/foto profil grup.\n\n" +
           "Bot akan otomatis update foto ke semua grup (bot admin).\n\n" +
           "💡 Kirim foto biasa, bukan sebagai file dokumen.",
-          { 
+          {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
@@ -3067,14 +3067,14 @@ Pilih fitur yang ingin digunakan:`;
         );
         return;
       }
-      
+
       // ✅ HANDLER BATAL AUTOSAMPUL
       if (data === "cancel_autosampul") {
         waitingForAutosampulPhoto.delete(userId);
         await ctx.answerCbQuery("❌ Dibatalkan");
         await ctx.editMessageText(
           "❌ *Auto Sampul dibatalkan.*",
-          { 
+          {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
@@ -3085,22 +3085,22 @@ Pilih fitur yang ingin digunakan:`;
         );
         return;
       }
-      
+
       // ✅ HANDLER EXECUTE KICK MEMBER
       if (data === "execute_kickmember") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           await ctx.reply("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
             parse_mode: "Markdown"
           });
           return;
         }
-        
+
         // ✅ CEK ROLE: HANYA OWNER DAN PREMIUM
         const isOwner = String(userId) === String(config.ownerId);
         const premium = isPremium(userId);
-        
+
         if (!isOwner && !premium) {
           await ctx.answerCbQuery("❌ Fitur ini hanya untuk Owner dan Premium User!", { show_alert: true });
           await ctx.reply(
@@ -3110,10 +3110,10 @@ Pilih fitur yang ingin digunakan:`;
           );
           return;
         }
-        
+
         // ✅ SET WAITING STATE & MINTA LINK GRUP
         waitingForKickMemberLink.set(userId, true);
-        
+
         await ctx.answerCbQuery();
         await ctx.reply(
           "👥❌ *KICK MEMBER - Mode Input Aktif*\n\n" +
@@ -3125,7 +3125,7 @@ Pilih fitur yang ingin digunakan:`;
           "*Contoh link:*\n" +
           "`https://chat.whatsapp.com/xxxxx`\n\n" +
           "💡 Kirim teks biasa (bukan command).",
-          { 
+          {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
@@ -3136,14 +3136,14 @@ Pilih fitur yang ingin digunakan:`;
         );
         return;
       }
-      
+
       // ✅ HANDLER BATAL KICK MEMBER
       if (data === "cancel_kickmember") {
         waitingForKickMemberLink.delete(userId);
         await ctx.answerCbQuery("❌ Dibatalkan");
         await ctx.editMessageText(
           "❌ *Kick Member dibatalkan.*",
-          { 
+          {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
@@ -3154,21 +3154,21 @@ Pilih fitur yang ingin digunakan:`;
         );
         return;
       }
-      
+
       // ✅ HANDLER EXECUTE BIO1 (minta input nomor dipisah koma)
       if (data === "execute_bio1") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           await ctx.reply("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
             parse_mode: "Markdown"
           });
           return;
         }
-        
+
         // ✅ SET WAITING STATE & MINTA INPUT
         waitingForBio1Input.set(userId, true);
-        
+
         await ctx.answerCbQuery();
         await ctx.reply(
           "📝 *BIO1 - Mode Input Aktif*\n\n" +
@@ -3176,7 +3176,7 @@ Pilih fitur yang ingin digunakan:`;
           "*Contoh:*\n" +
           "628123456789,628987654321,628111222333\n\n" +
           "💡 Kirim teks biasa (bukan command).",
-          { 
+          {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
@@ -3187,14 +3187,14 @@ Pilih fitur yang ingin digunakan:`;
         );
         return;
       }
-      
+
       // ✅ HANDLER BATAL BIO1
       if (data === "cancel_bio1") {
         waitingForBio1Input.delete(userId);
         await ctx.answerCbQuery("❌ Dibatalkan");
         await ctx.editMessageText(
           "❌ *Bio1 dibatalkan.*",
-          { 
+          {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
@@ -3205,21 +3205,21 @@ Pilih fitur yang ingin digunakan:`;
         );
         return;
       }
-      
+
       // ✅ HANDLER EXECUTE BIO2 (minta input nomor per baris)
       if (data === "execute_bio2") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           await ctx.reply("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
             parse_mode: "Markdown"
           });
           return;
         }
-        
+
         // ✅ SET WAITING STATE & MINTA INPUT
         waitingForBio2Input.set(userId, true);
-        
+
         await ctx.answerCbQuery();
         await ctx.reply(
           "📄 *BIO2 - Mode Input Aktif*\n\n" +
@@ -3229,7 +3229,7 @@ Pilih fitur yang ingin digunakan:`;
           "628987654321\n" +
           "628111222333\n\n" +
           "💡 Satu baris satu nomor.",
-          { 
+          {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
@@ -3240,14 +3240,14 @@ Pilih fitur yang ingin digunakan:`;
         );
         return;
       }
-      
+
       // ✅ HANDLER BATAL BIO2
       if (data === "cancel_bio2") {
         waitingForBio2Input.delete(userId);
         await ctx.answerCbQuery("❌ Dibatalkan");
         await ctx.editMessageText(
           "❌ *Bio2 dibatalkan.*",
-          { 
+          {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
@@ -3258,21 +3258,21 @@ Pilih fitur yang ingin digunakan:`;
         );
         return;
       }
-      
+
       // ✅ HANDLER EXECUTE BIO3 (minta file .txt)
       if (data === "execute_bio3") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           await ctx.reply("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
             parse_mode: "Markdown"
           });
           return;
         }
-        
+
         // ✅ SET WAITING STATE & MINTA FILE
         waitingForBio3Input.set(userId, true);
-        
+
         await ctx.answerCbQuery();
         await ctx.reply(
           "📁 *BIO3 - Mode Input Aktif*\n\n" +
@@ -3281,7 +3281,7 @@ Pilih fitur yang ingin digunakan:`;
           "• Satu baris satu nomor\n" +
           "• File harus format .txt\n\n" +
           "💡 Upload file biasa (bukan sebagai media).",
-          { 
+          {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
@@ -3292,14 +3292,14 @@ Pilih fitur yang ingin digunakan:`;
         );
         return;
       }
-      
+
       // ✅ HANDLER BATAL BIO3
       if (data === "cancel_bio3") {
         waitingForBio3Input.delete(userId);
         await ctx.answerCbQuery("❌ Dibatalkan");
         await ctx.editMessageText(
           "❌ *Bio3 dibatalkan.*",
-          { 
+          {
             parse_mode: "Markdown",
             reply_markup: {
               inline_keyboard: [
@@ -3310,11 +3310,11 @@ Pilih fitur yang ingin digunakan:`;
         );
         return;
       }
-      
+
       // Handle pairing menu
       if (data === "pairing_menu") {
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           try {
             await ctx.editMessageText("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
@@ -3327,7 +3327,7 @@ Pilih fitur yang ingin digunakan:`;
           }
           return;
         }
-        
+
         const pairingMsg = `📱 *PAIRING WHATSAPP*
 
 🔧 *Fitur:*  
@@ -3363,13 +3363,13 @@ Pilih fitur yang ingin digunakan:`;
         }
         return;
       }
-      
+
       // Handle help menus untuk bio dan wa features
       if (data === "bio1_help" || data === "bio2_help" || data === "bio3_help" ||
-          data === "get_pairing_help" || data === "autodesc_help" || data === "run_listgrup") {
-        
+        data === "get_pairing_help" || data === "autodesc_help" || data === "run_listgrup") {
+
         const isUserVerified = await isVerified(userId);
-        
+
         if (!isUserVerified) {
           try {
             await ctx.editMessageText("❌ *Anda belum terverifikasi!* Bergabung grup terlebih dahulu.", {
@@ -3382,11 +3382,11 @@ Pilih fitur yang ingin digunakan:`;
           }
           return;
         }
-        
+
         let replyText = "";
         let backButton = "wa_features_menu";
-        
-        switch(data) {
+
+        switch (data) {
           case "bio1_help":
             replyText = "📝 *CEK BIO - INPUT DENGAN KOMA*\n\n*Cara pakai:*\n1. Klik button 📝 Input Koma\n2. Kirim nomor dipisah koma\n\n*Contoh:*\n`628123456789,628987654321,628555555555`\n\n💡 Kirim teks biasa, TANPA ketik `/bio1`\n\n*Akurasi: 100%*";
             backButton = "bio_menu";
@@ -3410,13 +3410,13 @@ Pilih fitur yang ingin digunakan:`;
           case "run_listgrup":
             // Langsung jalankan command listgrup
             await ctx.answerCbQuery("⏳ Menjalankan list grup...");
-            
+
             // Panggil command listgrup secara langsung
             addToQueue(userId, async () => {
               try {
                 // ✅ PERBAIKAN: Gunakan session user dari getpairing (sama seperti bio1/bio2/bio3)
                 const sock = getUserWASession(userId);
-                
+
                 if (!sock) {
                   await ctx.reply(
                     "❌ *Anda belum melakukan pairing!*\n\n" +
@@ -3428,12 +3428,12 @@ Pilih fitur yang ingin digunakan:`;
 
                 const isOwner = userId == config.ownerId;
                 const isPremiumUser = isPremium(userId);
-                
+
                 if (!isOwner && !isPremiumUser) {
                   await ctx.reply("❌ Fitur ini hanya untuk *Owner* dan *Premium User*!", { parse_mode: "Markdown" });
                   return;
                 }
-                
+
                 if (!sock.user || !sock.user.id) {
                   await ctx.reply(
                     "❌ *Session tidak aktif.*\n\n" +
@@ -3442,7 +3442,7 @@ Pilih fitur yang ingin digunakan:`;
                   );
                   return;
                 }
-                
+
                 const loadingMsg = await ctx.reply("⏳ *Mengambil daftar grup...*", { parse_mode: "Markdown" });
 
                 const groups = await sock.groupFetchAllParticipating();
@@ -3451,8 +3451,8 @@ Pilih fitur yang ingin digunakan:`;
                 if (groupsList.length === 0) {
                   try {
                     await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
-                  } catch (e) {}
-                  
+                  } catch (e) { }
+
                   await ctx.reply("❌ *Bot tidak tergabung di grup manapun!*", { parse_mode: "Markdown" });
                   return;
                 }
@@ -3468,7 +3468,7 @@ Pilih fitur yang ingin digunakan:`;
                     `⏳ *Memeriksa status admin di ${groupsList.length} grup...*\n\n_Mohon tunggu sebentar..._`,
                     { parse_mode: "Markdown" }
                   );
-                } catch (e) {}
+                } catch (e) { }
 
                 const groupsByYear = {};
                 let processedCount = 0;
@@ -3479,26 +3479,26 @@ Pilih fitur yang ingin digunakan:`;
                 for (const group of groupsList) {
                   try {
                     console.log(`\n🔍 Checking: ${group.subject}`);
-                    
+
                     const checkAdmin = await isBotAdmin(sock, group.id);
-                    
+
                     console.log(`   Result: ${checkAdmin ? '✅ ADMIN' : '❌ NOT ADMIN'}`);
-                    
+
                     if (!checkAdmin) {
                       console.log(`⚠️ Bot bukan admin di: ${group.subject}`);
                       nonAdminCount++;
                     } else {
                       console.log(`✅ Bot admin di: ${group.subject}`);
                       adminCount++;
-                      
+
                       const metadata = await sock.groupMetadata(group.id);
-                      
+
                       const creationDate = new Date(metadata.creation * 1000);
                       const year = creationDate.getFullYear();
-                      
+
                       let creatorInfo = "no creator";
                       let hasCode = false;
-                      
+
                       if (metadata.owner) {
                         const phoneNumber = metadata.owner.split('@')[0];
                         creatorInfo = phoneNumber;
@@ -3514,10 +3514,10 @@ Pilih fitur yang ingin digunakan:`;
                         hasCode = false;
                         console.log(`   ❌ NO CODE - Date only: ${dateStr}`);
                       }
-                      
+
                       let inviteLink = "Link tidak tersedia";
                       let linkAvailable = false;
-                      
+
                       try {
                         const inviteCode = await sock.groupInviteCode(group.id);
                         if (inviteCode && inviteCode.length > 0) {
@@ -3527,7 +3527,7 @@ Pilih fitur yang ingin digunakan:`;
                         }
                       } catch (error1) {
                         console.log(`   ⚠️ Method 1 failed: ${error1.message}`);
-                        
+
                         try {
                           await new Promise(resolve => setTimeout(resolve, 500));
                           const newCode = await sock.groupRevokeInvite(group.id);
@@ -3538,7 +3538,7 @@ Pilih fitur yang ingin digunakan:`;
                           }
                         } catch (error2) {
                           console.log(`   ⚠️ Method 2 failed: ${error2.message}`);
-                          
+
                           try {
                             await new Promise(resolve => setTimeout(resolve, 500));
                             const queryResult = await sock.query({
@@ -3550,7 +3550,7 @@ Pilih fitur yang ingin digunakan:`;
                               },
                               content: [{ tag: 'invite', attrs: {} }]
                             });
-                            
+
                             if (queryResult && queryResult.content && queryResult.content[0]) {
                               const code = queryResult.content[0].attrs.code;
                               if (code) {
@@ -3569,11 +3569,11 @@ Pilih fitur yang ingin digunakan:`;
                           }
                         }
                       }
-                      
+
                       if (!groupsByYear[year]) {
                         groupsByYear[year] = [];
                       }
-                      
+
                       groupsByYear[year].push({
                         name: metadata.subject,
                         creator: creatorInfo,
@@ -3582,12 +3582,12 @@ Pilih fitur yang ingin digunakan:`;
                         hasCode: hasCode,
                         linkAvailable: linkAvailable
                       });
-                      
+
                       console.log(`   └─ Saved: ${year} - ${hasCode ? 'CODE' : 'NO CODE'} - Link: ${linkAvailable ? 'Available' : 'N/A'}`);
                     }
-                    
+
                     processedCount++;
-                    
+
                     if (processedCount % 3 === 0 || processedCount === groupsList.length) {
                       try {
                         await ctx.telegram.editMessageText(
@@ -3595,16 +3595,16 @@ Pilih fitur yang ingin digunakan:`;
                           loadingMsg.message_id,
                           null,
                           `⏳ *Memeriksa status admin...*\n\n` +
-                            `📊 Progress: ${processedCount}/${groupsList.length}\n` +
-                            `✅ Bot admin: ${adminCount}\n` +
-                            `⚠️ Bukan admin: ${nonAdminCount}`,
+                          `📊 Progress: ${processedCount}/${groupsList.length}\n` +
+                          `✅ Bot admin: ${adminCount}\n` +
+                          `⚠️ Bukan admin: ${nonAdminCount}`,
                           { parse_mode: "Markdown" }
                         );
-                      } catch (e) {}
+                      } catch (e) { }
                     }
-                    
+
                     await new Promise(resolve => setTimeout(resolve, 1500));
-                    
+
                   } catch (error) {
                     console.error(`❌ Error processing ${group.subject}:`, error.message);
                     processedCount++;
@@ -3613,7 +3613,7 @@ Pilih fitur yang ingin digunakan:`;
 
                 try {
                   await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
-                } catch (e) {}
+                } catch (e) { }
 
                 if (adminCount === 0) {
                   await ctx.reply(
@@ -3628,12 +3628,12 @@ Pilih fitur yang ingin digunakan:`;
 
                 // Format hasil untuk file TXT
                 let txtContent = `HASIL LINK GRUP (BOT ADMIN)\nTOTAL ${adminCount}\n\n`;
-                
+
                 const years = Object.keys(groupsByYear).sort((a, b) => parseInt(a) - parseInt(b));
-                
+
                 let totalWithCode = 0;
                 let totalNoCode = 0;
-                
+
                 for (const year of years) {
                   const groups = groupsByYear[year];
                   for (const group of groups) {
@@ -3644,20 +3644,20 @@ Pilih fitur yang ingin digunakan:`;
                     }
                   }
                 }
-                
+
                 console.log(`\n📊 SUMMARY:`);
                 console.log(`Total admin groups: ${adminCount}`);
                 console.log(`Groups with code: ${totalWithCode}`);
                 console.log(`Groups without code: ${totalNoCode}`);
-                
+
                 txtContent += `-${totalNoCode} no code\n`;
                 txtContent += `-${totalWithCode} code\n\n`;
-                
+
                 for (const year of years) {
                   const groups = groupsByYear[year];
                   const codeCount = groups.filter(g => g.hasCode).length;
                   const noCodeCount = groups.length - codeCount;
-                  
+
                   txtContent += `${year} ${groups.length} Grup\n`;
                   if (noCodeCount > 0) {
                     txtContent += `-${noCodeCount} no code\n`;
@@ -3666,39 +3666,39 @@ Pilih fitur yang ingin digunakan:`;
                     txtContent += `-${codeCount} code\n`;
                   }
                 }
-                
+
                 txtContent += `\n`;
-                
+
                 for (const year of years) {
                   const groups = groupsByYear[year];
                   txtContent += `${year} ${groups.length} grup\n`;
                   txtContent += `${'-'.repeat(50)}\n`;
-                  
+
                   groups.sort((a, b) => a.timestamp - b.timestamp);
-                  
+
                   const noCodeGroups = groups.filter(g => !g.hasCode);
                   const codeGroups = groups.filter(g => g.hasCode);
-                  
+
                   let counter = 1;
                   noCodeGroups.forEach((g) => {
                     txtContent += `${counter}.  No Code  ${g.link}\n`;
                     counter++;
                   });
-                  
+
                   codeGroups.forEach((g) => {
                     txtContent += `${counter}.  Code\n${g.link}\n`;
                     counter++;
                   });
-                  
+
                   txtContent += `\n`;
                 }
 
                 const fileName = `listgrup_${Date.now()}.txt`;
                 const filePath = `./${fileName}`;
-                
+
                 fs.writeFileSync(filePath, txtContent, 'utf8');
 
-                const caption = 
+                const caption =
                   `📊 *LIST GRUP (BOT ADMIN)*\n\n` +
                   `📈 Total grup bot: ${groupsList.length}\n` +
                   `✅ Bot admin: ${adminCount}\n` +
@@ -3708,7 +3708,7 @@ Pilih fitur yang ingin digunakan:`;
 
                 await ctx.replyWithDocument(
                   { source: filePath, filename: fileName },
-                  { 
+                  {
                     caption: caption,
                     parse_mode: "Markdown"
                   }
@@ -3731,7 +3731,7 @@ Pilih fitur yang ingin digunakan:`;
             });
             return;
         }
-        
+
         try {
           await ctx.editMessageText(replyText, {
             parse_mode: "Markdown",
@@ -3753,7 +3753,7 @@ Pilih fitur yang ingin digunakan:`;
         }
         return;
       }
-      
+
     } catch (error) {
       console.error("Callback query error:", error);
       try {
@@ -3914,17 +3914,17 @@ bot.command("listprem", async (ctx) => {
 // Command untuk owner menggunakan session file
 bot.command("obio", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   addToQueue(userId, async () => {
     // Cek apakah owner
     if (userId != config.ownerId) {
       await ctx.reply("❌ Hanya owner yang dapat menggunakan fitur ini!");
       return;
     }
-    
+
     const text = ctx.message.text;
     const args = text.split(" ").slice(1).join(" ");
-    
+
     if (!args) {
       // Tampilkan daftar session aktif
       const activeSessionsList = getActiveSessionsList();
@@ -3932,18 +3932,18 @@ bot.command("obio", async (ctx) => {
         await ctx.reply("❌ *Tidak ada session aktif!*", { parse_mode: "Markdown" });
         return;
       }
-      
+
       let message = "📱 *DAFTAR SESSION AKTIF:*\n\n";
       activeSessionsList.forEach((session, index) => {
         message += `${index + 1}. +${session.phone} (User: ${session.userId})\n`;
       });
-      
+
       message += "\n*Gunakan:* `/obio <phone> <numbers>`\n*Contoh:* `/obio 628123456789 628111,628222`";
-      
+
       await ctx.reply(message, { parse_mode: "Markdown" });
       return;
     }
-    
+
     await processBioCommandOwner(ctx, args);
   });
 });
@@ -3951,32 +3951,32 @@ bot.command("obio", async (ctx) => {
 // Command untuk owner menggunakan session file dengan reply
 bot.command("obiofile", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   addToQueue(userId, async () => {
     // Cek apakah owner
     if (userId != config.ownerId) {
       await ctx.reply("❌ Hanya owner yang dapat menggunakan fitur ini!");
       return;
     }
-    
+
     const text = ctx.message.text;
     const args = text.split(" ").slice(1);
-    
+
     if (args.length < 1) {
-      await ctx.reply("❌ *Format:* `/obiofile <phone>`\n*Contoh:* `/obiofile 628123456789` (reply file .txt)", { 
-        parse_mode: "Markdown" 
+      await ctx.reply("❌ *Format:* `/obiofile <phone>`\n*Contoh:* `/obiofile 628123456789` (reply file .txt)", {
+        parse_mode: "Markdown"
       });
       return;
     }
-    
+
     const targetPhone = args[0];
     const userWa = getActiveSessionByPhone(targetPhone);
-    
+
     if (!userWa) {
       await ctx.reply(`❌ *Session untuk +${targetPhone} tidak aktif!*`, { parse_mode: "Markdown" });
       return;
     }
-    
+
     const msg = ctx.message;
     let numbers = [];
 
@@ -3986,12 +3986,12 @@ bot.command("obiofile", async (ctx) => {
         await ctx.reply("❌ *Hanya file .txt yang didukung!*", { parse_mode: "Markdown" });
         return;
       }
-      
+
       try {
         const link = await ctx.telegram.getFileLink(file.file_id);
         const res = await fetch(link.href);
         const text = await res.text();
-        
+
         // Ekstrak nomor dari file
         numbers = extractNumbersFromText(text);
       } catch (error) {
@@ -4020,7 +4020,7 @@ bot.command("obiofile", async (ctx) => {
 
 bot.command("getpairing", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   addToQueue(userId, async () => {
     try {
       const text = ctx.message.text
@@ -4041,7 +4041,7 @@ bot.command("getpairing", async (ctx) => {
 
       const sessionId = `user_${userId}`
       let userWa = activeSessions.get(sessionId)?.socket
-      
+
       if (!userWa) {
         await ctx.reply("🔄 *Membuat session baru...*", { parse_mode: "Markdown" })
         userWa = await startWA(sessionId, userId)
@@ -4049,11 +4049,11 @@ bot.command("getpairing", async (ctx) => {
       }
 
       const loadingMsg = await ctx.reply("⏳ *Meminta pairing code...*", { parse_mode: "Markdown" })
-      
+
       const code = await userWa.requestPairingCode(cleanNum)
-      
+
       await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id)
-      
+
       const pairingMessage = `
 📱 *PAIRING CODE*
 
@@ -4073,7 +4073,7 @@ bot.command("getpairing", async (ctx) => {
       })
     } catch (err) {
       let errorMessage = "❌ *Gagal mendapatkan pairing code!*\n\n"
-      
+
       if (err.message.includes("rate limit")) {
         errorMessage += "⏰ *Terlalu banyak percobaan!* Coba lagi 1-2 menit lagi."
       } else if (err.message.includes("invalid phone number")) {
@@ -4099,7 +4099,7 @@ bot.command("getpairing", async (ctx) => {
 
 bot.command("delpairing", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   addToQueue(userId, async () => {
     let deleted = false;
 
@@ -4111,7 +4111,7 @@ bot.command("delpairing", async (ctx) => {
       console.error("delpairing error:", err);
       deleted = false;
     }
-    
+
     if (deleted) {
       await ctx.reply("✅ *Session berhasil dihapus!*\n\nPairing telah dihapus dari sistem.", {
         parse_mode: "Markdown",
@@ -4141,7 +4141,7 @@ bot.command("delpairing", async (ctx) => {
 
 bot.command("listsesi", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   if (userId != config.ownerId) {
     await ctx.reply("❌ Akses ditolak!");
     return;
@@ -4150,7 +4150,7 @@ bot.command("listsesi", async (ctx) => {
   addToQueue(userId, async () => {
     const now = Date.now()
     const fiveHours = 5 * 60 * 60 * 1000
-    
+
     let message = "📱 *DAFTAR SESSION AKTIF:*\n\n"
     let hasSessions = false
 
@@ -4166,11 +4166,11 @@ bot.command("listsesi", async (ctx) => {
     Object.entries(sessionData).forEach(([phone, data]) => {
       const session = activeSessions.get(data.sessionId)
       if (!session && (now - data.pairedAt) > fiveHours) {
-        sessionsToDelete.push({phone, sessionId: data.sessionId})
+        sessionsToDelete.push({ phone, sessionId: data.sessionId })
       }
     })
 
-    sessionsToDelete.forEach(({phone, sessionId}) => {
+    sessionsToDelete.forEach(({ phone, sessionId }) => {
       deleteSessionData(sessionId);
     })
     if (sessionsToDelete.length > 0) {
@@ -4181,7 +4181,7 @@ bot.command("listsesi", async (ctx) => {
       message = "❌ *Tidak ada session aktif.*"
     }
 
-    await ctx.reply(message, { 
+    await ctx.reply(message, {
       parse_mode: "Markdown",
       reply_markup: {
         inline_keyboard: [
@@ -4200,7 +4200,7 @@ bot.command("listsesi", async (ctx) => {
 
 bot.command("debugjid", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   if (userId != config.ownerId) {
     await ctx.reply("❌ Owner only!");
     return;
@@ -4209,7 +4209,7 @@ bot.command("debugjid", async (ctx) => {
   addToQueue(userId, async () => {
     try {
       const activeSessionsList = getActiveSessionsList();
-      
+
       if (activeSessionsList.length === 0) {
         await ctx.reply("❌ Tidak ada session aktif!");
         return;
@@ -4218,83 +4218,83 @@ bot.command("debugjid", async (ctx) => {
       const sessionId = activeSessionsList[0].sessionId;
       const session = activeSessions.get(sessionId);
       const sock = session.socket;
-      
+
       const loadingMsg = await ctx.reply("⏳ Mengambil info...");
-      
+
       // Ambil info bot
       const botInfo = {
         fullJid: sock.user.id,
         name: sock.user.name || 'No name',
         phone: sock.user.id.split('@')[0].split(':')[0]
       };
-      
+
       console.log("\n=== BOT IDENTITY INFO ===");
       console.log("Full JID:", botInfo.fullJid);
       console.log("Name:", botInfo.name);
       console.log("Phone:", botInfo.phone);
-      
+
       // Ambil daftar grup
       const groups = await sock.groupFetchAllParticipating();
       const groupsList = Object.values(groups).slice(0, 3); // Ambil 3 grup pertama
-      
+
       let debugText = `🤖 *BOT INFO*\n\n`;
       debugText += `📱 Full JID: \`${botInfo.fullJid}\`\n`;
       debugText += `👤 Name: ${botInfo.name}\n`;
       debugText += `📞 Phone: ${botInfo.phone}\n\n`;
       debugText += `📊 Total groups: ${Object.keys(groups).length}\n\n`;
       debugText += `━━━━━━━━━━━━━━━━━━\n\n`;
-      
+
       // Check 3 grup pertama untuk melihat format participant ID
       for (let i = 0; i < Math.min(3, groupsList.length); i++) {
         const group = groupsList[i];
-        
+
         try {
           const metadata = await sock.groupMetadata(group.id);
-          
-          console.log(`\n--- GROUP ${i+1}: ${metadata.subject} ---`);
+
+          console.log(`\n--- GROUP ${i + 1}: ${metadata.subject} ---`);
           console.log(`Total participants: ${metadata.participants.length}`);
-          
-          debugText += `📱 *Group ${i+1}: ${metadata.subject}*\n`;
+
+          debugText += `📱 *Group ${i + 1}: ${metadata.subject}*\n`;
           debugText += `Total participants: ${metadata.participants.length}\n\n`;
-          
+
           // Tampilkan 5 participant pertama dengan format ID mereka
           debugText += `Sample participant IDs:\n`;
           for (let j = 0; j < Math.min(5, metadata.participants.length); j++) {
             const p = metadata.participants[j];
             const role = p.admin || 'member';
-            
-            debugText += `${j+1}. \`${p.id}\`\n`;
+
+            debugText += `${j + 1}. \`${p.id}\`\n`;
             debugText += `   Role: ${role}\n`;
-            
-            console.log(`  ${j+1}. ID: ${p.id}`);
+
+            console.log(`  ${j + 1}. ID: ${p.id}`);
             console.log(`     Admin: ${role}`);
-            
+
             // Check apakah ini bot
-            const isBot = 
+            const isBot =
               p.id === botInfo.fullJid ||
               p.id.includes(botInfo.phone) ||
               p.id.split('@')[0].split(':')[0] === botInfo.phone;
-            
+
             if (isBot) {
               debugText += `   ⭐ *THIS IS BOT!*\n`;
               console.log(`     ⭐ THIS IS BOT!`);
             }
-            
+
             debugText += `\n`;
           }
-          
+
           // Cari bot di participants
           const botParticipant = metadata.participants.find(p => {
             return p.id === botInfo.fullJid ||
-                   p.id.includes(botInfo.phone) ||
-                   p.id.split('@')[0].split(':')[0] === botInfo.phone;
+              p.id.includes(botInfo.phone) ||
+              p.id.split('@')[0].split(':')[0] === botInfo.phone;
           });
-          
+
           if (botParticipant) {
             debugText += `✅ *Bot found in this group!*\n`;
             debugText += `Bot ID: \`${botParticipant.id}\`\n`;
             debugText += `Role: ${botParticipant.admin || 'member'}\n\n`;
-            
+
             console.log(`✅ Bot found!`);
             console.log(`   Bot ID in group: ${botParticipant.id}`);
             console.log(`   Role: ${botParticipant.admin || 'member'}`);
@@ -4302,23 +4302,23 @@ bot.command("debugjid", async (ctx) => {
             debugText += `❌ *Bot NOT found in this group*\n\n`;
             console.log(`❌ Bot NOT found in this group`);
           }
-          
+
           debugText += `━━━━━━━━━━━━━━━━━━\n\n`;
-          
+
           await new Promise(resolve => setTimeout(resolve, 500));
-          
+
         } catch (error) {
-          console.error(`Error processing group ${i+1}:`, error);
+          console.error(`Error processing group ${i + 1}:`, error);
           debugText += `❌ Error: ${error.message}\n\n`;
         }
       }
-      
+
       console.log("\n=== END DEBUG ===\n");
-      
+
       try {
         await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
-      } catch (e) {}
-      
+      } catch (e) { }
+
       // Split jika terlalu panjang
       if (debugText.length > 4000) {
         const parts = debugText.match(/[\s\S]{1,3900}/g) || [];
@@ -4329,7 +4329,7 @@ bot.command("debugjid", async (ctx) => {
       } else {
         await ctx.reply(debugText, { parse_mode: "Markdown" });
       }
-      
+
     } catch (error) {
       console.error("Error in debugjid:", error);
       await ctx.reply(`❌ Error: ${error.message}`);
@@ -4342,12 +4342,12 @@ bot.command("debugjid", async (ctx) => {
 async function isBotAdmin(sock, groupJid) {
   try {
     const groupMetadata = await sock.groupMetadata(groupJid);
-    
+
     console.log(`\nðŸ" Testing admin status: ${groupMetadata.subject}`);
-    
+
     // Simpan deskripsi asli
     const originalDesc = groupMetadata.desc || '';
-    
+
     // Coba update dengan deskripsi yang sama (tidak mengubah apapun)
     // Kalau bot admin, ini akan berhasil tanpa error
     try {
@@ -4356,18 +4356,18 @@ async function isBotAdmin(sock, groupJid) {
       return true;
     } catch (error) {
       // Error 403 atau "not-authorized" = bukan admin
-      if (error.message.includes('403') || 
-          error.message.includes('not-authorized') ||
-          error.message.includes('forbidden')) {
+      if (error.message.includes('403') ||
+        error.message.includes('not-authorized') ||
+        error.message.includes('forbidden')) {
         console.log(`âŒ Bot NOT ADMIN in: ${groupMetadata.subject}`);
         return false;
       }
-      
+
       // Error lain (network, etc) - anggap bukan admin untuk safety
       console.log(`âš ï¸ Unknown error in ${groupMetadata.subject}: ${error.message}`);
       return false;
     }
-    
+
   } catch (error) {
     console.error(`Error checking ${groupJid}:`, error.message);
     return false;
@@ -4391,7 +4391,7 @@ async function updateGroupDescription(sock, groupJid, description) {
 
 bot.command("debugadmin", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   if (userId != config.ownerId) {
     await ctx.reply("❌ Owner only!");
     return;
@@ -4400,7 +4400,7 @@ bot.command("debugadmin", async (ctx) => {
   addToQueue(userId, async () => {
     try {
       const activeSessionsList = getActiveSessionsList();
-      
+
       if (activeSessionsList.length === 0) {
         await ctx.reply("❌ Tidak ada session aktif!");
         return;
@@ -4409,82 +4409,82 @@ bot.command("debugadmin", async (ctx) => {
       const sessionId = activeSessionsList[0].sessionId;
       const session = activeSessions.get(sessionId);
       const sock = session.socket;
-      
+
       const loadingMsg = await ctx.reply("⏳ Mengambil info grup...");
-      
+
       const groups = await sock.groupFetchAllParticipating();
       const groupsList = Object.values(groups);
-      
+
       console.log("\n=== DEBUG ADMIN STATUS ===");
       console.log(`Bot JID: ${sock.user.id}`);
       console.log(`Total groups: ${groupsList.length}\n`);
-      
+
       let debugInfo = `🔍 DEBUG INFO\n\n`;
       debugInfo += `Bot JID: ${sock.user.id}\n`;
       debugInfo += `Total groups: ${groupsList.length}\n\n`;
-      
+
       // Ambil 3 grup pertama untuk testing
       const testGroups = groupsList.slice(0, 3);
-      
+
       for (const group of testGroups) {
         try {
           const groupMetadata = await sock.groupMetadata(group.id);
-          
+
           console.log(`\n--- Group: ${groupMetadata.subject} ---`);
           console.log(`Group JID: ${group.id}`);
           console.log(`Participants count: ${groupMetadata.participants.length}`);
-          
+
           debugInfo += `\n📱 Group: ${groupMetadata.subject}\n`;
           debugInfo += `Group JID: ${group.id}\n`;
-          
+
           // Cari bot di participants
           const botParticipant = groupMetadata.participants.find(
             p => p.id === sock.user.id
           );
-          
+
           if (botParticipant) {
             console.log(`✅ Bot found in group!`);
             console.log(`Bot participant:`, JSON.stringify(botParticipant, null, 2));
-            
+
             debugInfo += `✅ Bot found!\n`;
             debugInfo += `Admin status: ${botParticipant.admin || 'member'}\n`;
             debugInfo += `Participant ID: ${botParticipant.id}\n`;
           } else {
             console.log(`❌ Bot NOT found in participants`);
-            
+
             // Tampilkan beberapa participant untuk compare
             console.log(`Sample participants (first 3):`);
             groupMetadata.participants.slice(0, 3).forEach(p => {
               console.log(`  - ID: ${p.id}, Admin: ${p.admin || 'member'}`);
             });
-            
+
             debugInfo += `❌ Bot NOT found in participants!\n`;
             debugInfo += `Sample participant IDs:\n`;
             groupMetadata.participants.slice(0, 3).forEach(p => {
               debugInfo += `  - ${p.id}\n`;
             });
           }
-          
+
           await new Promise(resolve => setTimeout(resolve, 500));
-          
+
         } catch (error) {
           console.error(`Error processing group ${group.subject}:`, error);
         }
       }
-      
+
       console.log("\n=== END DEBUG ===\n");
-      
+
       try {
         await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
-      } catch (e) {}
-      
+      } catch (e) { }
+
       // Split message jika terlalu panjang
       if (debugInfo.length > 4000) {
         debugInfo = debugInfo.substring(0, 3900) + "\n\n...(truncated)";
       }
-      
+
       await ctx.reply(debugInfo);
-      
+
     } catch (error) {
       console.error("Error in debugadmin:", error);
       await ctx.reply(`❌ Error: ${error.message}`);
@@ -4497,7 +4497,7 @@ bot.command("debugadmin", async (ctx) => {
 
 bot.command("chat", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   if (userId != config.ownerId) {
     await ctx.reply("❌ Hanya owner yang dapat menggunakan fitur ini!");
     return;
@@ -4506,14 +4506,14 @@ bot.command("chat", async (ctx) => {
   addToQueue(userId, async () => {
     const text = ctx.message.text.split(" ").slice(1).join(" ");
     if (!text) {
-      await ctx.reply("❌ *Format:* `/chat <pesan>`\n*Contoh:* `/chat Halo semua user!`", { 
-        parse_mode: "Markdown" 
+      await ctx.reply("❌ *Format:* `/chat <pesan>`\n*Contoh:* `/chat Halo semua user!`", {
+        parse_mode: "Markdown"
       });
       return;
     }
 
-    const loadingMsg = await ctx.reply("📤 *Mengirim pesan ke semua user...*", { 
-      parse_mode: "Markdown" 
+    const loadingMsg = await ctx.reply("📤 *Mengirim pesan ke semua user...*", {
+      parse_mode: "Markdown"
     });
 
     let successCount = 0;
@@ -4527,7 +4527,7 @@ bot.command("chat", async (ctx) => {
           { parse_mode: "Markdown" }
         );
         successCount++;
-        
+
         await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
         failCount++;
@@ -4554,21 +4554,21 @@ bot.command("chat", async (ctx) => {
 async function bio1Logic(ctx, userId, inputText) {
   if (!inputText || !inputText.trim()) {
     await ctx.reply(
-      "❌ *Format:* Kirim nomor dipisah koma.\n*Contoh:* `628123xxx,628456xxx,...`", 
+      "❌ *Format:* Kirim nomor dipisah koma.\n*Contoh:* `628123xxx,628456xxx,...`",
       { parse_mode: "Markdown" }
     );
     return;
   }
-  
+
   let numbers = extractNumbersFromText(inputText);
-  
+
   if (numbers.length === 0) {
     await ctx.reply(
       "❌ *Tidak ditemukan nomor yang valid.*\n\n" +
       "Pastikan format nomor:\n" +
       "• Minimal 8 digit\n" +
       "• Maksimal 15 digit\n" +
-      "• Contoh: 628123456789, 628987654321", 
+      "• Contoh: 628123456789, 628987654321",
       { parse_mode: "Markdown" }
     );
     return;
@@ -4578,7 +4578,7 @@ async function bio1Logic(ctx, userId, inputText) {
   touchUser(userId);
   const premium = isPremium(userId);
   const isOwner = String(userId) === String(config.ownerId);
-  
+
   // Owner bypass semua limit
   if (!isOwner) {
     if (premium) {
@@ -4595,7 +4595,7 @@ async function bio1Logic(ctx, userId, inputText) {
     } else {
       // Free user: ambil dari settings (default 100)
       const limit = getFreeBio1Limit();
-      
+
       if (numbers.length > limit) {
         await ctx.reply(
           `⚠️ User FREE max *${limit} nomor* per sekali.\n` +
@@ -4608,13 +4608,13 @@ async function bio1Logic(ctx, userId, inputText) {
       }
     }
   }
-  
+
   await processBioCommand(ctx, numbers);
 }
 
 bot.command("bio1", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   addToQueue(userId, async () => {
     const text = ctx.message.text;
     const args = text.split(" ").slice(1).join(" ");
@@ -4653,12 +4653,12 @@ async function bio2Logic(ctx, userId, inputText) {
     await ctx.reply("❌ *Format:* Kirim nomor per baris.\n*Contoh:*\n628123456789\n628987654321", { parse_mode: "Markdown" });
     return;
   }
-  
+
   let numbers = extractNumbersFromText(inputText);
-  
+
   if (numbers.length === 0) {
-    await ctx.reply("❌ *Tidak ditemukan nomor yang valid.*\n\nPastikan format nomor:\n• Minimal 8 digit\n• Maksimal 15 digit\n• Satu baris satu nomor", { 
-      parse_mode: "Markdown" 
+    await ctx.reply("❌ *Tidak ditemukan nomor yang valid.*\n\nPastikan format nomor:\n• Minimal 8 digit\n• Maksimal 15 digit\n• Satu baris satu nomor", {
+      parse_mode: "Markdown"
     });
     return;
   }
@@ -4685,13 +4685,13 @@ async function bio2Logic(ctx, userId, inputText) {
       numbers = numbers.slice(0, limit);
     }
   }
-  
+
   await processBioCommand(ctx, numbers);
 }
 
 bot.command("bio2", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   addToQueue(userId, async () => {
     const text = ctx.message.text;
     const lines = text.split("\n").slice(1).join("\n");
@@ -4707,9 +4707,9 @@ async function bio3Logic(ctx, userId, fileBuffer) {
     await ctx.reply("❌ *File tidak valid!*", { parse_mode: "Markdown" });
     return;
   }
-  
+
   let numbers = extractNumbersFromText(fileBuffer.toString());
-  
+
   if (numbers.length === 0) {
     await ctx.reply("❌ *Tidak ditemukan nomor yang valid dalam file.*", { parse_mode: "Markdown" });
     return;
@@ -4720,11 +4720,11 @@ async function bio3Logic(ctx, userId, fileBuffer) {
 
 bot.command("bio3", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   // ✅ Pengecekan Premium/Owner
   const premium = isPremium(userId);
   const owner = (userId == config.ownerId);
-  
+
   if (!premium && !owner) {
     await ctx.reply(
       "❌ *Fitur bio3 hanya untuk Premium & Owner!*\n\n" +
@@ -4734,7 +4734,7 @@ bot.command("bio3", async (ctx) => {
     );
     return;
   }
-  
+
   addToQueue(userId, async () => {
     const msg = ctx.message;
     let numbers = [];
@@ -4745,12 +4745,12 @@ bot.command("bio3", async (ctx) => {
         await ctx.reply("❌ *Hanya file .txt yang didukung!*", { parse_mode: "Markdown" });
         return;
       }
-      
+
       try {
         const link = await ctx.telegram.getFileLink(file.file_id);
         const res = await fetch(link.href);
         const fileBuffer = Buffer.from(await res.arrayBuffer());
-        
+
         await bio3Logic(ctx, userId, fileBuffer);
         return;
       } catch (error) {
@@ -4775,45 +4775,45 @@ bot.command("bio3", async (ctx) => {
 // ✅ HANDLER TEXT MESSAGE UNTUK AUTODESC DAN BIO
 bot.on("text", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   // Cek apakah user sedang menunggu input autodesc
   if (waitingForAutodescInput.has(userId)) {
     waitingForAutodescInput.delete(userId);
     const description = ctx.message.text.trim();
-    
+
     addToQueue(userId, async () => {
       await autodescLogic(ctx, userId, description);
     });
     return;
   }
-  
+
   // ✅ Cek apakah user sedang menunggu input kick member
   if (waitingForKickMemberLink.has(userId)) {
     waitingForKickMemberLink.delete(userId);
     const groupLink = ctx.message.text.trim();
-    
+
     addToQueue(userId, async () => {
       await kickMemberLogic(ctx, userId, groupLink);
     });
     return;
   }
-  
+
   // ✅ Cek apakah user sedang menunggu input bio1
   if (waitingForBio1Input.has(userId)) {
     waitingForBio1Input.delete(userId);
     const inputText = ctx.message.text.trim();
-    
+
     addToQueue(userId, async () => {
       await bio1Logic(ctx, userId, inputText);
     });
     return;
   }
-  
+
   // ✅ Cek apakah user sedang menunggu input bio2
   if (waitingForBio2Input.has(userId)) {
     waitingForBio2Input.delete(userId);
     const inputText = ctx.message.text.trim();
-    
+
     addToQueue(userId, async () => {
       await bio2Logic(ctx, userId, inputText);
     });
@@ -4824,12 +4824,12 @@ bot.on("text", async (ctx) => {
 // ✅ HANDLER FOTO UNTUK AUTOSAMPUL
 bot.on("photo", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   // Cek apakah user sedang menunggu foto autosampul
   if (waitingForAutosampulPhoto.has(userId)) {
     // Hapus state waiting
     waitingForAutosampulPhoto.delete(userId);
-    
+
     try {
       // Ambil foto yang dikirim user
       const photo = ctx.message.photo;
@@ -4837,21 +4837,21 @@ bot.on("photo", async (ctx) => {
         await ctx.reply("❌ *Foto tidak valid!* Coba kirim ulang.", { parse_mode: "Markdown" });
         return;
       }
-      
+
       // Ambil foto terbesar (kualitas terbaik)
       const best = photo[photo.length - 1];
       const fileId = best.file_id;
-      
+
       // Download foto
       const fileLink = await ctx.telegram.getFileLink(fileId);
       const res = await axios.get(String(fileLink), { responseType: "arraybuffer", timeout: 60000 });
       const imageBuffer = Buffer.from(res.data);
-      
+
       // Langsung proses autosampul
       addToQueue(userId, async () => {
         await autosampulLogic(ctx, userId, imageBuffer);
       });
-      
+
     } catch (error) {
       await ctx.reply(`❌ Error: ${error.message}`);
     }
@@ -4861,15 +4861,15 @@ bot.on("photo", async (ctx) => {
 // ✅ HANDLER DOCUMENT UNTUK BIO3
 bot.on("document", async (ctx) => {
   const userId = ctx.from.id;
-  
+
   // Cek apakah user sedang menunggu file bio3
   if (waitingForBio3Input.has(userId)) {
     waitingForBio3Input.delete(userId);
-    
+
     // ✅ Pengecekan Premium/Owner
     const premium = isPremium(userId);
     const owner = (userId == config.ownerId);
-    
+
     if (!premium && !owner) {
       await ctx.reply(
         "❌ *Fitur bio3 hanya untuk Premium & Owner!*\n\n" +
@@ -4879,26 +4879,26 @@ bot.on("document", async (ctx) => {
       );
       return;
     }
-    
+
     try {
       const file = ctx.message.document;
-      
+
       // Validasi file .txt
       if (!file.file_name.endsWith('.txt')) {
         await ctx.reply("❌ *Hanya file .txt yang didukung!* Kirim ulang file yang benar.", { parse_mode: "Markdown" });
         return;
       }
-      
+
       // Download file
       const link = await ctx.telegram.getFileLink(file.file_id);
       const res = await fetch(link.href);
       const fileBuffer = Buffer.from(await res.arrayBuffer());
-      
+
       // Langsung proses bio3
       addToQueue(userId, async () => {
         await bio3Logic(ctx, userId, fileBuffer);
       });
-      
+
     } catch (error) {
       await ctx.reply(`❌ Error: ${error.message}`);
     }
@@ -4912,15 +4912,15 @@ async function main() {
   if (botStarted) {
     return;
   }
-  
+
   try {
     await bot.launch();
     botStarted = true;
-    
+
     setTimeout(async () => {
       await restoreUserSessions();
     }, 2000);
-    
+
     console.log('🤖 Bot berhasil dijalankan!');
     console.log('✅ Handler /start sudah diperbaiki');
     console.log('✅ Fitur verifikasi group sudah diperbaiki');
@@ -4929,7 +4929,7 @@ async function main() {
     console.log('🖼️ Welcome photo siap digunakan dengan URL:', config.welcomePhoto || 'Tidak ada URL foto');
     console.log('🎶 Audio URL:', config.audioUrl || 'Tidak ada URL audio');
     console.log('🔥 Bot siap melayani!');
-    
+
   } catch (error) {
     if (error.message && error.message.includes('409')) {
       console.log('Bot sudah berjalan');
@@ -4945,7 +4945,7 @@ module.exports = {
   checkUserWAConnection,
   listsesi: async (ctx) => {
     const userId = ctx.from.id;
-    
+
     if (userId != config.ownerId) {
       await ctx.reply("❌ Akses ditolak!");
       return;
@@ -4953,7 +4953,7 @@ module.exports = {
 
     const now = Date.now();
     const fiveHours = 5 * 60 * 60 * 1000;
-    
+
     let message = "📱 *DAFTAR SESSION AKTIF:*\n\n";
     let hasSessions = false;
 
@@ -4969,11 +4969,11 @@ module.exports = {
     Object.entries(sessionData).forEach(([phone, data]) => {
       const session = activeSessions.get(data.sessionId)
       if (!session && (now - data.pairedAt) > fiveHours) {
-        sessionsToDelete.push({phone, sessionId: data.sessionId})
+        sessionsToDelete.push({ phone, sessionId: data.sessionId })
       }
     })
 
-    sessionsToDelete.forEach(({phone, sessionId}) => {
+    sessionsToDelete.forEach(({ phone, sessionId }) => {
       deleteSessionData(sessionId);
     })
     if (sessionsToDelete.length > 0) {
@@ -4984,7 +4984,7 @@ module.exports = {
       message = "❌ *Tidak ada session aktif.*"
     }
 
-    await ctx.reply(message, { 
+    await ctx.reply(message, {
       parse_mode: "Markdown",
       reply_markup: {
         inline_keyboard: [
