@@ -1,5 +1,7 @@
 const { Telegraf } = require("telegraf")
 const crypto = require("crypto")
+// ✅ FIX: Pastikan crypto tersedia secara global untuk library yang membutuhkannya
+global.crypto = crypto;
 const fs = require("fs")
 const path = require("path")
 const pino = require("pino")
@@ -1671,7 +1673,7 @@ function getEnhancedCaption(stats) {
 ✅ *Total Meta Verified:* ${stats.totalMetaVerified}
 🔗 *Total dengan Sosmed:* ${stats.connectedSocials}
 
-⏰ *Powered by: ZETA_ZTA*`;
+⏰ *Powered by:   BGGR SMS @OTPBEGRSS*`;
 }
 
 
@@ -1728,7 +1730,7 @@ async function processBioCommandWithSession(ctx, numbers, userWa) {
       fs.writeFileSync(filename, output);
       await ctx.replyWithDocument({
         source: filename,
-        filename: `HASIL_CEKBIO_ZETA_${Date.now()}.txt`
+        filename: `HASIL_CEKBIO_BGGRSMS${Date.now()}.txt`
       }, {
         caption: caption,
         parse_mode: "Markdown",
@@ -1938,7 +1940,7 @@ async function sendMainMenu(ctx) {
     }
  ⚬ bot name:${config.botName || "Cek Bio Bot"}
  ⚬ uptime:${runtime}
- ⚬ owner: @kahaja888
+ ⚬ owner: @vazzdg
  ⚬ version:0.2
  ⚬ languages:English
 
@@ -4081,7 +4083,7 @@ bot.command("getpairing", async (ctx) => {
       } else if (err.message.includes("not registered")) {
         errorMessage += "📵 *Nomor tidak terdaftar di WhatsApp!*"
       } else {
-        errorMessage += `⚠️ *Error:* ${err.message}`
+        errorMessage += `⚠️ *Error (DEBUG CHECK):* ${err.message}`
       }
 
       await ctx.reply(errorMessage, {
