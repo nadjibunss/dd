@@ -5,6 +5,6 @@ module.exports = {
   groupChatId: -1002209925701,
   groupLink: "https://t.me/+_k1R4v9aG2dhNmVh",
   botName: "BGGR",
-  welcomePhoto: "https://t.me/+1-uhkBsVeuozYzVl"
+  welcomePhoto: "https://low-orange-8gakzyilwk.edgeone.app/5086850160788179832.jpg"
 
 };
